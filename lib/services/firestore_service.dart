@@ -1,6 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
+import 'dart:io';
 import '../models/user_model.dart';
 import '../models/new_model.dart';
+import '../models/resource_model.dart';
 
 /// Service for Firestore database operations
 class FirestoreService {
@@ -153,5 +158,193 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs
             .map((doc) => AppUser.fromMap(doc.data(), doc.id))
             .toList());
+  }
+
+  // ──────────────────────────────────────────────
+  //  Resource Management
+  // ──────────────────────────────────────────────
+
+  /// Upload PDF file to Firebase Storage
+  Future<String> uploadPdfToStorage(File file, String fileName) async {
+    try {
+      final storageRef = FirebaseStorage.instance.ref().child('resources/$fileName');
+      final uploadTask = await storageRef.putFile(file);
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      return downloadUrl;
+    } catch (e) {
+      throw Exception('Failed to upload PDF: $e');
+    }
+  }
+
+  /// Create a new resource
+  Future<void> createResource(Resource resource) async {
+    await _firestore.collection('resources').doc(resource.id).set(resource.toFirestore());
+  }
+
+  /// Stream all resources
+  Stream<List<Resource>> streamResources() {
+    return _firestore.collection('resources')
+        .orderBy('uploadDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Resource.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Stream resources by category
+  Stream<List<Resource>> streamResourcesByCategory(String category) {
+    if (category == ResourceCategory.all) {
+      return streamResources();
+    }
+    return _firestore.collection('resources')
+        .where('category', isEqualTo: category)
+        .orderBy('uploadDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Resource.fromFirestore(doc))
+            .toList());
+  }
+
+  /// High-level method to upload a resource (Google Drive Link and metadata)
+  Future<bool> uploadResource({
+    required String title,
+    required String description,
+    required String category,
+    required String driveLink,
+  }) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      final userDoc = await _usersCollection.doc(currentUser.uid).get();
+      if (!userDoc.exists || userDoc.data() == null) {
+        throw Exception('User profile not found');
+      }
+
+      final userName = userDoc.data()!['name'] ?? 'Unknown Alumni';
+      final resourceId = const Uuid().v4();
+      
+      // Create Resource object with the Drive link stored in pdfUrl field
+      final resource = Resource(
+        id: resourceId,
+        title: title,
+        description: description,
+        pdfUrl: driveLink.trim(),
+        category: category,
+        uploadedBy: currentUser.uid,
+        uploadedByName: userName,
+        uploadDate: DateTime.now(),
+      );
+      
+      // Save to Firestore
+      await createResource(resource);
+      
+      return true;
+    } catch (e) {
+      print('Error uploading resource: $e');
+      return false;
+    }
+  }
+
+  /// Delete a resource
+  Future<void> deleteResource(String resourceId) async {
+    try {
+      await _firestore.collection('resources').doc(resourceId).delete();
+    } catch (e) {
+      throw Exception('Failed to delete resource: $e');
+    }
+  }
+
+  /// Get resources uploaded by a specific user
+  Stream<List<Resource>> streamUserResources(String userId) {
+    return _firestore.collection('resources')
+        .where('uploadedBy', isEqualTo: userId)
+        .orderBy('uploadDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Resource.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Search resources by title or description
+  Future<List<Resource>> searchResources(String query) async {
+    try {
+      final snapshot = await _firestore.collection('resources').get();
+      final allResources = snapshot.docs
+          .map((doc) => Resource.fromFirestore(doc))
+          .toList();
+      
+      final lowerQuery = query.toLowerCase();
+      return allResources.where((resource) {
+        return resource.title.toLowerCase().contains(lowerQuery) ||
+               resource.description.toLowerCase().contains(lowerQuery);
+      }).toList();
+    } catch (e) {
+      print('Error searching resources: $e');
+      return [];
+    }
+  }
+
+  /// Get matched alumni based on student interests
+  Future<List<AppUser>> getMatchedAlumni(List<String> interests) async {
+    try {
+      if (interests.isEmpty) return [];
+
+      final snapshot = await _usersCollection
+          .where('role', isEqualTo: 'alumni')
+          .where('verificationStatus', isEqualTo: 'verified')
+          .get();
+
+      final List<AppUser> allAlumni = snapshot.docs
+          .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+          .toList();
+
+      // Filter alumni who match any of the interests
+      return allAlumni.where((alumni) {
+        final industry = alumni.industry?.toLowerCase() ?? '';
+        final jobRole = alumni.jobRole?.toLowerCase() ?? '';
+        final mentorInterests = alumni.mentorshipInterests?.map((e) => e.toLowerCase()).toList() ?? [];
+
+        return interests.any((interest) {
+          final lowInterest = interest.toLowerCase();
+          return industry.contains(lowInterest) ||
+                 jobRole.contains(lowInterest) ||
+                 mentorInterests.any((mi) => mi.contains(lowInterest));
+        });
+      }).toList();
+    } catch (e) {
+      print('Error matching alumni: $e');
+      return [];
+    }
+  }
+
+  /// Stream matched alumni based on student interests
+  Stream<List<AppUser>> streamMatchedAlumni(List<String> interests) {
+    if (interests.isEmpty) return Stream.value([]);
+
+    return _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        .where('verificationStatus', isEqualTo: 'verified')
+        .snapshots()
+        .map((snapshot) {
+      final allAlumni = snapshot.docs
+          .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+          .toList();
+
+      return allAlumni.where((alumni) {
+        final industry = alumni.industry?.toLowerCase() ?? '';
+        final jobRole = alumni.jobRole?.toLowerCase() ?? '';
+        final mentorInterests = alumni.mentorshipInterests?.map((e) => e.toLowerCase()).toList() ?? [];
+
+        return interests.any((interest) {
+          final lowInterest = interest.toLowerCase();
+          return industry.contains(lowInterest) ||
+                 jobRole.contains(lowInterest) ||
+                 mentorInterests.any((mi) => mi.contains(lowInterest));
+        });
+      }).toList();
+    });
   }
 }

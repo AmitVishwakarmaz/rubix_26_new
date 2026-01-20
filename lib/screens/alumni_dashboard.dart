@@ -13,6 +13,7 @@ import 'ai_chat_screen.dart';
 import 'alumni/mentorship_requests_screen.dart';
 import 'alumni/post_job_screen.dart';
 import 'alumni/my_mentees_screen.dart';
+import 'alumni/upload_resource_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 
@@ -517,6 +518,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
         'screen': const ResourcesScreen(),
         'locked': false,
       },
+      {
+        'icon': Icons.upload_file_rounded,
+        'title': 'Upload Resource',
+        'color': const Color(0xFFFF9800),
+        'screen': const ResourcesScreen(),
+        'locked': !isVerified,
+      },
     ];
 
     return Padding(
@@ -731,13 +739,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           Icon(
             icon,
             color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
-            size: 28,
+            size: 24,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
             ),
