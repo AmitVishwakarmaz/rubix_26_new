@@ -5,6 +5,8 @@ import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import 'login_screen.dart';
 import 'student_profile_screen.dart';
+import 'verification_request_screen.dart';
+import 'qr_verification_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -190,6 +192,66 @@ class _StudentDashboardState extends State<StudentDashboard> {
                           color: const Color(0xFF00f2fe),
                           locked: !(_userProfile?.isVerified ?? false),
                         ),
+                        
+                        const SizedBox(height: 24),
+                        const Divider(),
+                        const SizedBox(height: 16),
+                        
+                        // Verification Section
+                        Text(
+                          'Verification',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Request Verification
+                        if (!(_userProfile?.isVerified ?? false))
+                          _buildVerificationButton(
+                            icon: Icons.verified_user,
+                            title: 'Request University Verification',
+                            subtitle: 'Verify your student ID',
+                            color: Colors.blue.shade600,
+                            onTap: () {
+                              final user = FirebaseAuth.instance.currentUser;
+                              if (user != null && _userProfile != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: user.uid,
+                                      name: _userProfile!.name,
+                                      email: _userProfile!.email,
+                                      role: 'student',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        const SizedBox(height: 12),
+                        
+                        // Verify QR Code
+                        _buildVerificationButton(
+                          icon: Icons.qr_code_scanner,
+                          title: 'Verify QR Code',
+                          subtitle: 'Scan or upload your verification QR',
+                          color: Colors.green.shade600,
+                          onTap: () {
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => QrVerificationScreen(userId: user.uid),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -197,6 +259,72 @@ class _StudentDashboardState extends State<StudentDashboard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildVerificationButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color, color.withOpacity(0.8)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, 
+                color: Colors.white, size: 16),
+          ],
         ),
       ),
     );

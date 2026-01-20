@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import 'login_screen.dart';
+import 'admin_verification_panel.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -137,6 +138,19 @@ class _AdminDashboardState extends State<AdminDashboard>
                           ),
                         ],
                       ),
+                    ),
+                    // API Verification Panel Button
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AdminVerificationPanel(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.qr_code_2, color: Colors.white),
+                      tooltip: 'API Verification Panel',
                     ),
                     IconButton(
                       onPressed: () async {
