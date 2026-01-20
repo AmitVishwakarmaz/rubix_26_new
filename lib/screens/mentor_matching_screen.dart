@@ -420,7 +420,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => MentorDetailScreen(mentor: user.toMap()),
+            builder: (_) => MentorDetailScreen(mentor: {...user.toMap(), 'userId': user.userId}),
           ),
         );
       },
@@ -671,7 +671,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => MentorDetailScreen(mentor: user.toMap()),
+                          builder: (_) => MentorDetailScreen(mentor: {...user.toMap(), 'userId': user.userId}),
                         ),
                       );
                     },

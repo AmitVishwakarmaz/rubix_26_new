@@ -347,4 +347,9 @@ class FirestoreService {
       }).toList();
     });
   }
+
+  /// Send mentorship request
+  Future<void> sendMentorshipRequest(MentorshipRequest request) async {
+    await _firestore.collection('mentorship_requests').doc(request.id).set(request.toMap());
+  }
 }

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import 'session_booking_screen.dart';
+import '../services/firestore_service.dart';
+import '../models/new_model.dart';
+import '../models/user_model.dart';
 
 class MentorDetailScreen extends StatefulWidget {
   final Map<String, dynamic> mentor;
@@ -14,6 +19,8 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isSaved = false;
+  final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   @override
   void initState() {
@@ -827,50 +834,185 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6C63FF).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: Color(0xFF6C63FF),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SessionBookingScreen(mentor: widget.mentor),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _showConnectDialog(context),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF6C63FF).withOpacity(0.1),
+                      foregroundColor: const Color(0xFF6C63FF),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: Color(0xFF6C63FF), width: 1),
+                      ),
+                      elevation: 0,
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: const Color(0xFF6C63FF),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
+                    child: const Text(
+                      'Connect with Mentor',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6C63FF).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Book a Session',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                  child: const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: Color(0xFF6C63FF),
                   ),
                 ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SessionBookingScreen(mentor: widget.mentor),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF6C63FF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Book a Session',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showConnectDialog(BuildContext context) {
+    final TextEditingController messageController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Connect with Mentor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add a message to introduce yourself and explain why you\'d like to connect with ${widget.mentor['name']}.',
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Enter your message...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.black12),
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final message = messageController.text.trim();
+              if (message.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a message')),
+                );
+                return;
+              }
+
+              final currentUser = _auth.currentUser;
+              if (currentUser == null) return;
+
+              // Show loading
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sending request...')),
+              );
+
+              try {
+                final studentData = await _firestoreService.getUser(currentUser.uid);
+                if (studentData == null) return;
+
+                final request = MentorshipRequest(
+                  id: const Uuid().v4(),
+                  studentId: currentUser.uid,
+                  studentName: studentData.name,
+                  alumniId: widget.mentor['userId'] ?? widget.mentor['id'] ?? '',
+                  alumniName: widget.mentor['name'] ?? '',
+                  message: message,
+                  status: 'pending',
+                  date: DateTime.now(),
+                );
+
+                await _firestoreService.sendMentorshipRequest(request);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Connection request sent!')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error sending request: $e')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6C63FF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Send Request'),
+          ),
+        ],
       ),
     );
   }
