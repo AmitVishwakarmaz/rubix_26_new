@@ -7,17 +7,20 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class QuickMeetingScreen extends StatefulWidget {
-  final String roomName;
-  final String token;
-  final String meetingTitle;
-  final DateTime scheduledTime;
+  final String? roomName;
+  final String? token;
+  final String? title;
+  final DateTime? scheduledTime;
+  // Legacy support for old parameter names
+  final String? meetingTitle;
 
   const QuickMeetingScreen({
     super.key,
-    required this.roomName,
-    required this.token,
-    required this.meetingTitle,
-    required this.scheduledTime,
+    this.roomName,
+    this.token,
+    this.title,
+    this.meetingTitle,
+    this.scheduledTime,
   });
 
   @override
@@ -33,11 +36,44 @@ class _QuickMeetingScreenState extends State<QuickMeetingScreen> {
   bool _cameraEnabled = false;
   bool _micEnabled = false;
   String _permissionStatus = '';
+  
+  // Computed properties with defaults
+  late String _roomName;
+  late String _token;
+  late String _meetingTitle;
+  late DateTime _scheduledTime;
 
   @override
   void initState() {
     super.initState();
+    _initializeMeeting();
+  }
+  
+  Future<void> _initializeMeeting() async {
+    // Generate room name if not provided
+    _roomName = widget.roomName ?? 'meeting_${const Uuid().v4().substring(0, 8)}';
+    
+    // Get meeting title
+    _meetingTitle = widget.title ?? widget.meetingTitle ?? 'Video Meeting';
+    
+    // Get scheduled time or use now
+    _scheduledTime = widget.scheduledTime ?? DateTime.now();
+    
+    // Generate token if not provided
+    if (widget.token != null && widget.token!.isNotEmpty) {
+      _token = widget.token!;
+    } else {
+      _token = await _generateToken(_roomName);
+    }
+    
     _requestPermissionsAndJoin();
+  }
+  
+  Future<String> _generateToken(String roomName) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final identity = currentUser?.displayName ?? currentUser?.email ?? 'User_${const Uuid().v4().substring(0, 4)}';
+    
+    return MeetingService.generateToken(roomName: roomName, identity: identity);
   }
 
   Future<void> _requestPermissionsAndJoin() async {
@@ -101,7 +137,7 @@ class _QuickMeetingScreenState extends State<QuickMeetingScreen> {
 
       await room.connect(
         _serverUrl,
-        widget.token,
+        _token,
         roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true),
       );
 
@@ -169,7 +205,7 @@ class _QuickMeetingScreenState extends State<QuickMeetingScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: Text(widget.meetingTitle),
+        title: Text(_meetingTitle),
         backgroundColor: const Color(0xFF121212),
         elevation: 0,
         centerTitle: true,
@@ -221,7 +257,7 @@ class _QuickMeetingScreenState extends State<QuickMeetingScreen> {
             ),
             const SizedBox(height: 32),
             Text(
-              widget.meetingTitle,
+              _meetingTitle,
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -231,7 +267,7 @@ class _QuickMeetingScreenState extends State<QuickMeetingScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Room: ${widget.roomName}',
+              'Room: $_roomName',
               style: const TextStyle(color: Colors.white54),
             ),
             const SizedBox(height: 48),

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import 'session_booking_screen.dart';
+import '../services/firestore_service.dart';
+import '../models/new_model.dart';
+import '../models/user_model.dart';
 
 class MentorDetailScreen extends StatefulWidget {
   final Map<String, dynamic> mentor;
   
-  const MentorDetailScreen({Key? key, required this.mentor}) : super(key: key);
+  const MentorDetailScreen({super.key, required this.mentor});
 
   @override
   State<MentorDetailScreen> createState() => _MentorDetailScreenState();
@@ -14,6 +19,8 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isSaved = false;
+  final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   @override
   void initState() {
@@ -125,13 +132,11 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildProfileSection(bool isDark) {
-    final name = widget.mentor['name'] as String? ?? 'Mentor';
-    final role = widget.mentor['role'] as String? ?? 'Alumni';
-    final company = widget.mentor['company'] as String? ?? 'Company';
-    final experience = widget.mentor['experience'] as String? ?? 'N/A';
-    final responseTime = widget.mentor['responseTime'] as String? ?? 'N/A';
-    final isVerified = widget.mentor['verified'] as bool? ?? false;
-    final matchScore = widget.mentor['matchScore']?.toString() ?? '95';
+    final String name = widget.mentor['name'] ?? 'Alumni';
+    final String role = widget.mentor['jobRole'] ?? widget.mentor['role'] ?? 'Mentor';
+    final String company = widget.mentor['currentCompany'] ?? widget.mentor['company'] ?? 'N/A';
+    final bool isVerified = widget.mentor['verificationStatus'] == 'verified' || (widget.mentor['verified'] ?? false);
+    final int matchScore = widget.mentor['matchScore'] ?? 90;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -258,7 +263,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
           
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -284,14 +289,14 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildQuickStat(Icons.work_rounded, experience),
+              _buildQuickStat(Icons.work_rounded, widget.mentor['experience'] ?? '5+ yrs'),
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 width: 1,
                 height: 30,
                 color: isDark ? Colors.white24 : Colors.black12,
               ),
-              _buildQuickStat(Icons.access_time_rounded, responseTime),
+              _buildQuickStat(Icons.access_time_rounded, widget.mentor['responseTime'] ?? '< 24h'),
             ],
           ),
         ],
@@ -325,7 +330,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.star_rounded,
               label: 'Rating',
-              value: '${widget.mentor['rating'] ?? '5.0'}',
+              value: '${widget.mentor['rating'] ?? 5.0}',
               color: Colors.amber,
             ),
           ),
@@ -336,7 +341,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.groups_rounded,
               label: 'Mentees',
-              value: '${widget.mentor['mentees'] ?? '0'}',
+              value: '${widget.mentor['mentees'] ?? 10}',
               color: const Color(0xFF6C63FF),
             ),
           ),
@@ -347,7 +352,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.videocam_rounded,
               label: 'Sessions',
-              value: '${widget.mentor['sessions'] ?? '0'}',
+              value: '${widget.mentor['sessions'] ?? widget.mentor['totalSessions'] ?? 25}',
               color: const Color(0xFF00D4AA),
             ),
           ),
@@ -431,10 +436,12 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildAboutTab(bool isDark) {
-    final role = widget.mentor['role'] as String? ?? 'Alumni';
-    final company = widget.mentor['company'] as String? ?? 'Company';
-    final experience = widget.mentor['experience'] as String? ?? 'N/A';
-    final skills = widget.mentor['skills'] as List<dynamic>? ?? ['Mentoring'];
+    final String role = widget.mentor['jobRole'] ?? widget.mentor['role'] ?? 'Mentor';
+    final String company = widget.mentor['currentCompany'] ?? widget.mentor['company'] ?? 'N/A';
+    final String experience = widget.mentor['experience'] ?? '5+ yrs';
+    final List<String> skills = (widget.mentor['skills'] as List?)?.cast<String>() ?? 
+                               (widget.mentor['mentorshipInterests'] as List?)?.cast<String>() ?? 
+                               ['Mentoring', 'Leadership', 'Strategy'];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -487,7 +494,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                   ],
                 ),
                 child: Text(
-                  skill.toString(),
+                  skill,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -506,7 +513,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           ),
           const SizedBox(height: 16),
           
-          _buildCareerTimeline(isDark),
+          _buildCareerTimeline(isDark, role, company),
           
           const SizedBox(height: 100),
         ],
@@ -514,12 +521,9 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
     );
   }
 
-  Widget _buildCareerTimeline(bool isDark) {
-    final role = widget.mentor['role'] as String? ?? 'Alumni';
-    final company = widget.mentor['company'] as String? ?? 'Company';
-    
+  Widget _buildCareerTimeline(bool isDark, String currentRole, String currentCompany) {
     final positions = [
-      {'year': '2024 - Present', 'title': role, 'company': company},
+      {'year': '2024 - Present', 'title': currentRole, 'company': currentCompany},
       {'year': '2021 - 2024', 'title': 'Software Engineer', 'company': 'Tech Startup'},
       {'year': '2018 - 2021', 'title': 'Junior Developer', 'company': 'Software Company'},
     ];
@@ -544,12 +548,12 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                             colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
                           )
                         : null,
-                    color: index == 0 ? null : Colors.white12,
+                    color: index == 0 ? null : (isDark ? Colors.white10 : Colors.black12),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     index == 0 ? Icons.work_rounded : Icons.work_outline_rounded,
-                    color: Colors.white,
+                    color: index == 0 ? Colors.white : (isDark ? Colors.white38 : Colors.black38),
                     size: 20,
                   ),
                 ),
@@ -558,7 +562,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                     width: 2,
                     height: 60,
                     margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: Colors.white24,
+                    color: isDark ? Colors.white24 : Colors.black12,
                   ),
               ],
             ),
@@ -615,7 +619,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   Widget _buildReviewsTab(bool isDark) {
     return ListView.builder(
       padding: const EdgeInsets.all(24),
-      itemCount: 5,
+      itemCount: 3,
       itemBuilder: (context, index) {
         return _buildReviewCard(isDark, index);
       },
@@ -740,6 +744,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildAvailabilityTab(bool isDark) {
+    final String availability = widget.mentor['availability'] ?? 'Flexible';
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -759,7 +764,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Availability status: ${widget.mentor['availability']}',
+                    'Availability status: $availability',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -816,62 +821,151 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
 
   Widget _buildBottomBar(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 20,
-            offset: const Offset(0, -5),
+            offset: const Offset(0, -10),
           ),
         ],
       ),
       child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.chat_rounded),
-                label: const Text('Message'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  side: const BorderSide(color: Color(0xFF6C63FF)),
-                  foregroundColor: const Color(0xFF6C63FF),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SessionBookingScreen(mentor: widget.mentor),
                 ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: const Color(0xFF6C63FF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Book a Session',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(width: 16),
-            
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SessionBookingScreen(mentor: widget.mentor),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.calendar_today_rounded),
-                label: const Text('Book Session'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: const Color(0xFF6C63FF),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showConnectDialog(BuildContext context) {
+    final TextEditingController messageController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Connect with Mentor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add a message to introduce yourself and explain why you\'d like to connect with ${widget.mentor['name']}.',
+              style: TextStyle(
+                fontSize: 14,
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Enter your message...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.black12),
                 ),
+                filled: true,
+                fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
               ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final message = messageController.text.trim();
+              if (message.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a message')),
+                );
+                return;
+              }
+
+              final currentUser = _auth.currentUser;
+              if (currentUser == null) return;
+
+              // Show loading
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sending request...')),
+              );
+
+              try {
+                final studentData = await _firestoreService.getUser(currentUser.uid);
+                if (studentData == null) return;
+
+                final request = MentorshipRequest(
+                  id: const Uuid().v4(),
+                  studentId: currentUser.uid,
+                  studentName: studentData.name,
+                  alumniId: widget.mentor['userId'] ?? widget.mentor['id'] ?? '',
+                  alumniName: widget.mentor['name'] ?? '',
+                  message: message,
+                  status: 'pending',
+                  date: DateTime.now(),
+                );
+
+                await _firestoreService.sendMentorshipRequest(request);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Connection request sent!')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error sending request: $e')),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6C63FF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Send Request'),
+          ),
+        ],
       ),
     );
   }

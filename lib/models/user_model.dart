@@ -113,6 +113,7 @@ class AppUser {
   /// Convert to Firestore document
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,  // Include userId for reference
       'name': name,
       'email': email,
       'role': role,

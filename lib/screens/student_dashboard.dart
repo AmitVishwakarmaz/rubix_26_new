@@ -15,6 +15,7 @@ import 'ai_chat_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 import 'community/community_screen.dart';
+import 'student_sessions_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -68,13 +69,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
     }
 
     final List<Widget> screens = [
-      Navigator(
-        onGenerateRoute: (settings) {
-          return MaterialPageRoute(
-            builder: (_) => _buildHomeContent(isDark, uid),
-          );
-        },
-      ),
+      _buildHomeContent(isDark, uid),
+      const CommunityScreen(),
+      const StudentConnectScreen(),
       const ProfileScreen(),
     ];
 
@@ -420,6 +417,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       MaterialPageRoute(
                         builder: (_) => MentorDetailScreen(
                           mentor: {
+                            'userId': mentor.userId,  // Include userId for session bookings
                             'name': mentor.name,
                             'role': mentor.jobRole ?? 'Alumni',
                             'company': mentor.currentCompany ?? 'Company',
@@ -586,9 +584,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
     final features = [
       {
         'icon': Icons.auto_awesome_rounded,
-        'title': 'Mentor Match',
+        'title': 'Sessions',
         'color': const Color(0xFF6C63FF),
-        'screen': const MentorMatchingScreen(),
+        'screen': const StudentSessionsScreen(),
         'locked': !isVerified,
       },
       {
@@ -808,10 +806,10 @@ class _StudentDashboardState extends State<StudentDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildNavItem(0, Icons.home_rounded, 'Home'),
-              _buildNavItem(0, Icons.explore_rounded, 'Explore', isExplore: true),
+              _buildNavItem(1, Icons.groups_rounded, 'Community'),
               const SizedBox(width: 64),
-              _buildNavItem(0, Icons.connect_without_contact, 'Connect', isEvents: true),
-              _buildNavItem(1, Icons.person_rounded, 'Profile'),
+              _buildNavItem(2, Icons.connect_without_contact, 'Connect'),
+              _buildNavItem(3, Icons.person_rounded, 'Profile'),
             ],
           ),
         ),
@@ -819,19 +817,11 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label, {bool isExplore = false, bool isEvents = false}) {
-    final isSelected = _selectedIndex == index && !isExplore && !isEvents;
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _selectedIndex == index;
 
     return GestureDetector(
-      onTap: () {
-        if (isExplore) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityScreen()));
-        } else if (isEvents) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentConnectScreen()));
-        } else {
-          setState(() => _selectedIndex = index);
-        }
-      },
+      onTap: () => setState(() => _selectedIndex = index),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

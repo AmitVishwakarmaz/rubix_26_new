@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
+import '../services/firestore_service.dart';
+import '../services/google_calendar_service.dart';
+import '../models/new_model.dart';
 
 class SessionBookingScreen extends StatefulWidget {
   final Map<String, dynamic> mentor;
@@ -16,6 +21,9 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
   String? _selectedDuration;
   String? _selectedPurpose;
   final _notesController = TextEditingController();
+  final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isLoading = false;
 
   final List<String> _purposes = [
     'Career Guidance',
@@ -75,11 +83,66 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
     }
   }
 
-  void _confirmBooking() {
-    showDialog(
-      context: context,
-      builder: (context) => _buildSuccessDialog(),
-    );
+  Future<void> _confirmBooking() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to book a session')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Get current user's name from Firestore
+      final userData = await _firestoreService.getUser(currentUser.uid);
+      final studentName = userData?.name ?? currentUser.displayName ?? 'Student';
+
+      // Debug: print mentor data to see what's available
+      print('🔍 Mentor data keys: ${widget.mentor.keys.toList()}');
+      print('🔍 userId: ${widget.mentor['userId']}');
+      print('🔍 id: ${widget.mentor['id']}');
+      print('🔍 name: ${widget.mentor['name']}');
+
+      final alumniId = widget.mentor['userId'] ?? widget.mentor['id'] ?? '';
+      print('📧 Using Alumni ID: $alumniId');
+
+      // Create session booking
+      final session = SessionBooking(
+        id: const Uuid().v4(),
+        studentId: currentUser.uid,
+        studentName: studentName,
+        alumniId: alumniId,
+        alumniName: widget.mentor['name'] ?? 'Mentor',
+        purpose: _selectedPurpose ?? '',
+        duration: _selectedDuration ?? '',
+        date: _selectedDate ?? '',
+        time: _selectedTime ?? '',
+        notes: _notesController.text.trim(),
+        status: 'pending',
+        createdAt: DateTime.now(),
+      );
+
+      // Save to Firestore
+      await _firestoreService.bookSession(session);
+
+      setState(() => _isLoading = false);
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => _buildSuccessDialog(),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error booking session: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -716,7 +779,7 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: _canProceed ? _nextStep : null,
+                onPressed: (_canProceed && !_isLoading) ? _nextStep : null,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: const Color(0xFF6C63FF),
@@ -725,14 +788,23 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
                   ),
                   disabledBackgroundColor: Colors.grey,
                 ),
-                child: Text(
-                  _currentStep == 3 ? 'Confirm Booking' : 'Continue',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        _currentStep == 3 ? 'Confirm Booking' : 'Continue',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -790,7 +862,32 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            
+            // Add to Calendly button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openCalendly(),
+                icon: const Icon(Icons.calendar_month_rounded, color: Colors.white),
+                label: const Text(
+                  'Add to Calendar',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white, width: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             
             SizedBox(
               width: double.infinity,
@@ -821,6 +918,72 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openCalendly() async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final result = await GoogleCalendarService.addSessionToCalendar(
+        mentorName: widget.mentor['name'] ?? 'Mentor',
+        mentorEmail: widget.mentor['email'] ?? '',
+        date: _selectedDate ?? '',
+        time: _selectedTime ?? '',
+        duration: _selectedDuration ?? '30 min',
+        purpose: _selectedPurpose ?? 'Mentoring',
+        notes: _notesController.text,
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      if (result['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(result['message'] ?? 'Event added to calendar!')),
+                ],
+              ),
+              backgroundColor: const Color(0xFF00D4AA),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not add to calendar: ${result['error']}'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+      
+      print('Calendar error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   IconData _getPurposeIcon(String purpose) {

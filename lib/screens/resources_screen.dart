@@ -1,309 +1,323 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/firestore_service.dart';
+import '../models/resource_model.dart';
 
 class ResourcesScreen extends StatefulWidget {
-  const ResourcesScreen({Key? key}) : super(key: key);
+  const ResourcesScreen({super.key});
 
   @override
   State<ResourcesScreen> createState() => _ResourcesScreenState();
 }
 
-class _ResourcesScreenState extends State<ResourcesScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  String _selectedCategory = 'All';
-  
-  final List<String> _categories = [
-    'All',
-    'Resume',
-    'Interview',
-    'Coding',
-    'Career',
-    'Company Guides',
-  ];
+class _ResourcesScreenState extends State<ResourcesScreen> {
+  final _firestoreService = FirestoreService();
+  final _searchController = TextEditingController();
 
-  final List<Map<String, dynamic>> _resources = [
-    {
-      'title': 'Software Engineer Resume Template',
-      'type': 'PDF',
-      'category': 'Resume',
-      'author': 'Sarah Johnson',
-      'downloads': 1234,
-      'rating': 4.8,
-      'size': '2.5 MB',
-      'description': 'Professional resume template optimized for tech roles',
-    },
-    {
-      'title': 'Google Interview Prep Guide',
-      'type': 'Document',
-      'category': 'Interview',
-      'author': 'Michael Chen',
-      'downloads': 2341,
-      'rating': 4.9,
-      'size': '5.2 MB',
-      'description': 'Comprehensive guide with common questions and answers',
-    },
-    {
-      'title': 'Data Structures & Algorithms',
-      'type': 'Video',
-      'category': 'Coding',
-      'author': 'Priya Patel',
-      'downloads': 3456,
-      'rating': 5.0,
-      'size': '250 MB',
-      'description': 'Complete DSA crash course for interviews',
-    },
-    {
-      'title': 'Product Manager Career Path',
-      'type': 'Article',
-      'category': 'Career',
-      'author': 'David Kim',
-      'downloads': 987,
-      'rating': 4.7,
-      'size': '1.2 MB',
-      'description': 'From associate PM to senior leadership',
-    },
-    {
-      'title': 'Meta Engineering Interview Experience',
-      'type': 'Document',
-      'category': 'Company Guides',
-      'author': 'Emily Rodriguez',
-      'downloads': 1876,
-      'rating': 4.9,
-      'size': '3.8 MB',
-      'description': 'Complete breakdown of the Meta interview process',
-    },
-  ];
+  String _selectedCategory = ResourceCategory.all;
+  String _searchQuery = '';
+
+  String? _userRole;
+  bool _isLoadingRole = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _loadUserRole();
   }
+
+  Future<void> _loadUserRole() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      
+      if (uid == null) {
+        print('⚠️ No user logged in');
+        if (mounted) {
+          setState(() => _isLoadingRole = false);
+        }
+        return;
+      }
+
+      print('🔍 Loading role for user: $uid');
+      final role = await _firestoreService.getUserRole(uid);
+      print('✅ User role loaded: $role');
+      
+      if (mounted) {
+        setState(() {
+          _userRole = role;
+          _isLoadingRole = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading user role: $e');
+      if (mounted) {
+        setState(() => _isLoadingRole = false);
+      }
+    }
+  }
+
+  bool get _canUpload =>
+      _userRole == 'alumni' ||
+      _userRole == 'mentor' ||
+      _userRole == 'admin';
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get _filteredResources {
-    if (_selectedCategory == 'All') return _resources;
-    return _resources.where((r) => r['category'] == _selectedCategory).toList();
+  List<Resource> _filterResources(List<Resource> resources) {
+    var filtered = resources;
+
+    if (_selectedCategory != ResourceCategory.all) {
+      filtered =
+          filtered.where((r) => r.category == _selectedCategory).toList();
+    }
+
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      filtered = filtered.where((r) {
+        return r.title.toLowerCase().contains(q) ||
+            r.description.toLowerCase().contains(q) ||
+            r.uploadedByName.toLowerCase().contains(q);
+      }).toList();
+    }
+
+    return filtered;
   }
 
+  Future<void> _openLink(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open link')),
+        );
+      }
+    } catch (e) {
+      print('❌ Error opening link: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error opening link: $e')),
+      );
+    }
+  }
+
+  /// ===================== UPLOAD BOTTOM SHEET =====================
+  void _showUploadBottomSheet() {
+    String title = '';
+    String description = '';
+    String selectedCategory = '';
+    String driveLink = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Upload New Resource',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => title = v.trim(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Description',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                    onChanged: (v) => description = v.trim(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory.isEmpty ? null : selectedCategory,
+                    hint: const Text('Select category'),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ResourceCategory.uploadCategories
+                        .map((c) =>
+                            DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setModalState(() => selectedCategory = v);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Google Drive Link',
+                      hintText: 'https://drive.google.com/...',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => driveLink = v.trim(),
+                  ),
+                  const SizedBox(height: 28),
+
+                  FilledButton.icon(
+                    onPressed: (title.isEmpty ||
+                            selectedCategory.isEmpty ||
+                            driveLink.isEmpty)
+                        ? null
+                        : () async {
+                            Navigator.pop(context);
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Uploading...')),
+                            );
+
+                            try {
+                              await _firestoreService.uploadResource(
+                                title: title,
+                                description: description,
+                                category: selectedCategory,
+                                driveLink: driveLink,
+                              );
+
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Resource uploaded successfully'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Upload failed: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                    icon: const Icon(Icons.upload_rounded),
+                    label: const Text('Upload'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ===================== UI =====================
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0F0F1E), const Color(0xFF1A1A2E)]
-                : [const Color(0xFFF8F9FE), const Color(0xFFFFFFFF)],
-          ),
-        ),
-        child: SafeArea(
+
+    if (_isLoadingRole) {
+      return Scaffold(
+        body: Center(
           child: Column(
-            children: [
-              _buildHeader(isDark),
-              _buildTabBar(isDark),
-              _buildCategoryFilter(isDark),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildAllResources(isDark),
-                    _buildSavedResources(isDark),
-                  ],
-                ),
-              ),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading user profile...'),
             ],
           ),
         ),
-      ),
-      floatingActionButton: _buildUploadButton(isDark),
-    );
-  }
+      );
+    }
 
-  Widget _buildHeader(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back_rounded),
-                iconSize: 28,
-              ),
-              const SizedBox(width: 12),
-              
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Resources',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Knowledge shared by mentors',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.search_rounded),
-                iconSize: 28,
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.library_books_rounded,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '1,000+ Resources',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        'Curated by industry experts',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black12,
-          ),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          dividerColor: Colors.transparent,
-          labelColor: Colors.white,
-          unselectedLabelColor: isDark ? Colors.white70 : Colors.black54,
-          tabs: const [
-            Tab(text: 'All Resources'),
-            Tab(text: 'Saved'),
+    return Scaffold(
+      floatingActionButton: _canUpload
+          ? FloatingActionButton.extended(
+              onPressed: _showUploadBottomSheet,
+              icon: const Icon(Icons.upload_file_rounded),
+              label: const Text('Upload Resource'),
+              backgroundColor: const Color(0xFF6C63FF),
+            )
+          : null,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildSearchBar(),
+            _buildCategoryFilter(isDark),
+            Expanded(child: _buildResourcesList(isDark)),
           ],
         ),
       ),
     );
   }
 
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        decoration: const InputDecoration(
+          hintText: 'Search resources...',
+          prefixIcon: Icon(Icons.search),
+          border: OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCategoryFilter(bool isDark) {
-    return Container(
-      height: 50,
-      margin: const EdgeInsets.only(top: 16),
+    return SizedBox(
+      height: 48,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: _categories.length,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: ResourceCategory.categories.length,
         itemBuilder: (context, index) {
-          final category = _categories[index];
-          final isSelected = _selectedCategory == category;
-          
+          final cat = ResourceCategory.categories[index];
+          final selected = _selectedCategory == cat;
+
           return GestureDetector(
-            onTap: () => setState(() => _selectedCategory = category),
+            onTap: () => setState(() => _selectedCategory = cat),
             child: Container(
               margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                gradient: isSelected
-                    ? const LinearGradient(
-                        colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-                      )
-                    : null,
-                color: isSelected
-                    ? null
-                    : (isDark ? const Color(0xFF1A1A2E) : Colors.white),
+                color: selected
+                    ? const Color(0xFF6C63FF)
+                    : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isSelected
-                      ? Colors.transparent
-                      : (isDark ? Colors.white24 : Colors.black12),
-                ),
               ),
               child: Text(
-                category,
+                cat,
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected
-                      ? Colors.white
-                      : (isDark ? Colors.white : Colors.black87),
+                  color: selected ? Colors.white : Colors.black87,
                 ),
               ),
             ),
@@ -313,267 +327,131 @@ class _ResourcesScreenState extends State<ResourcesScreen>
     );
   }
 
-  Widget _buildAllResources(bool isDark) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: _filteredResources.length,
-      itemBuilder: (context, index) {
-        return _buildResourceCard(_filteredResources[index], isDark);
-      },
-    );
-  }
+  Widget _buildResourcesList(bool isDark) {
+    return StreamBuilder<List<Resource>>(
+      stream: _firestoreService.streamResources(),
+      builder: (context, snapshot) {
+        print('📊 StreamBuilder state: ${snapshot.connectionState}');
+        
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading resources...'),
+              ],
+            ),
+          );
+        }
 
-  Widget _buildResourceCard(Map<String, dynamic> resource, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF6C63FF + (resource['title'].hashCode % 1000)),
-                      Color(0xFF4E9FFF + (resource['title'].hashCode % 1000)),
-                    ],
+        if (snapshot.hasError) {
+          print('❌ Stream error: ${snapshot.error}');
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data == null) {
+          print('⚠️ No data in snapshot');
+          return const Center(
+            child: Text('No data available'),
+          );
+        }
+
+        print('✅ Resources loaded: ${snapshot.data!.length} items');
+        final filtered = _filterResources(snapshot.data!);
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.folder_open,
+                  size: 64,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _searchQuery.isNotEmpty || _selectedCategory != ResourceCategory.all
+                      ? 'No resources match your filters'
+                      : 'No resources available yet',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade600,
                   ),
-                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(
-                  _getResourceIcon(resource['type']),
-                  color: Colors.white,
-                  size: 28,
+                if (_canUpload) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _showUploadBottomSheet,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Upload First Resource'),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: filtered.length,
+          itemBuilder: (context, i) {
+            final r = filtered[i];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  child: Text(
+                    r.title[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              
-              Expanded(
-                child: Column(
+                title: Text(
+                  r.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      resource['title'],
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    const SizedBox(height: 4),
+                    Text(r.description),
                     const SizedBox(height: 4),
                     Text(
-                      'by ${resource['author']}',
+                      'By ${r.uploadedByName} • ${r.category}',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? Colors.white70 : Colors.black54,
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
                       ),
                     ),
                   ],
                 ),
-              ),
-              
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.bookmark_outline_rounded),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          Text(
-            resource['description'],
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? Colors.white70 : Colors.black54,
-              height: 1.5,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          Row(
-            children: [
-              _buildInfoChip(
-                Icons.download_rounded,
-                '${resource['downloads']}',
-                isDark,
-              ),
-              const SizedBox(width: 12),
-              
-              _buildInfoChip(
-                Icons.star_rounded,
-                '${resource['rating']}',
-                isDark,
-              ),
-              const SizedBox(width: 12),
-              
-              _buildInfoChip(
-                Icons.storage_rounded,
-                resource['size'],
-                isDark,
-              ),
-              const Spacer(),
-              
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6C63FF).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  resource['type'],
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6C63FF),
-                  ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () => _openLink(r.pdfUrl),
+                  tooltip: 'Open resource',
                 ),
               ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.download_rounded),
-              label: const Text('Download'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
-  }
-
-  Widget _buildInfoChip(IconData icon, String label, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: isDark ? Colors.white70 : Colors.black54),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSavedResources(bool isDark) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Icon(
-              Icons.bookmark_outline_rounded,
-              size: 56,
-              color: isDark ? Colors.white54 : Colors.black38,
-            ),
-          ),
-          const SizedBox(height: 24),
-          
-          Text(
-            'No Saved Resources',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          Text(
-            'Bookmark resources to access them quickly',
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUploadButton(bool isDark) {
-    return FloatingActionButton.extended(
-      onPressed: () {},
-      backgroundColor: const Color(0xFF6C63FF),
-      icon: const Icon(Icons.upload_rounded, color: Colors.white),
-      label: const Text(
-        'Upload',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  IconData _getResourceIcon(String type) {
-    switch (type) {
-      case 'PDF':
-        return Icons.picture_as_pdf_rounded;
-      case 'Document':
-        return Icons.description_rounded;
-      case 'Video':
-        return Icons.play_circle_outline_rounded;
-      case 'Article':
-        return Icons.article_rounded;
-      default:
-        return Icons.insert_drive_file_rounded;
-    }
   }
 }

@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import '../models/user_model.dart';
 import '../models/new_model.dart';
+import '../models/resource_model.dart';
 
 /// Service for Firestore database operations
 class FirestoreService {
@@ -365,5 +368,202 @@ class FirestoreService {
               .toList();
           return events.isEmpty ? null : events.first;
         });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RESOURCE-RELATED METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Get resources collection reference
+  CollectionReference<Map<String, dynamic>> get _resourcesCollection =>
+      _firestore.collection('resources');
+
+  /// Stream all resources (sorted by upload date descending)
+  Stream<List<Resource>> streamResources() {
+    return _resourcesCollection
+        .orderBy('uploadDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Resource.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Upload a new resource
+  Future<void> uploadResource({
+    required String title,
+    required String description,
+    required String category,
+    required String driveLink,
+  }) async {
+    // Get current user info from Firebase Auth
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    String uploadedBy = '';
+    String uploadedByName = 'Unknown';
+    
+    if (currentUser != null) {
+      uploadedBy = currentUser.uid;
+      final userDoc = await _usersCollection.doc(currentUser.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        uploadedByName = userDoc.data()!['name'] ?? currentUser.displayName ?? 'Unknown';
+      }
+    }
+
+    await _resourcesCollection.add({
+      'title': title,
+      'description': description,
+      'category': category,
+      'pdfUrl': driveLink,
+      'driveLink': driveLink,
+      'uploadedBy': uploadedBy,
+      'uploadedByName': uploadedByName,
+      'uploadDate': Timestamp.now(),
+    });
+  }
+
+  // ==================== MENTORSHIP REQUESTS ====================
+
+  /// Get mentorship requests collection reference
+  CollectionReference<Map<String, dynamic>> get _mentorshipRequestsCollection =>
+      _firestore.collection('mentorship_requests');
+
+  /// Send a mentorship request
+  Future<void> sendMentorshipRequest(MentorshipRequest request) async {
+    await _mentorshipRequestsCollection.doc(request.id).set(request.toMap());
+  }
+
+  /// Get mentorship requests for an alumni
+  Stream<List<MentorshipRequest>> streamMentorshipRequestsForAlumni(String alumniId) {
+    return _mentorshipRequestsCollection
+        .where('alumniId', isEqualTo: alumniId)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Get mentorship requests sent by a student
+  Stream<List<MentorshipRequest>> streamMentorshipRequestsForStudent(String studentId) {
+    return _mentorshipRequestsCollection
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Update mentorship request status
+  Future<void> updateMentorshipRequestStatus(String requestId, String status) async {
+    await _mentorshipRequestsCollection.doc(requestId).update({'status': status});
+  }
+
+  // ==================== SESSION BOOKINGS ====================
+
+  /// Get session bookings collection reference
+  CollectionReference<Map<String, dynamic>> get _sessionBookingsCollection =>
+      _firestore.collection('session_bookings');
+
+  /// Book a session
+  Future<void> bookSession(SessionBooking session) async {
+    print('📅 Booking session: ${session.id}');
+    print('📅 Alumni ID: ${session.alumniId}');
+    print('📅 Student ID: ${session.studentId}');
+    await _sessionBookingsCollection.doc(session.id).set(session.toMap());
+    print('✅ Session booked successfully');
+  }
+
+  /// Stream all sessions for an alumni (filter by status on client side to avoid index issues)
+  Stream<List<SessionBooking>> streamAllSessionsForAlumni(String alumniId) {
+    print('🔍 Streaming sessions for alumni: $alumniId');
+    return _sessionBookingsCollection
+        .where('alumniId', isEqualTo: alumniId)
+        .snapshots()
+        .map((snapshot) {
+          print('📊 Found ${snapshot.docs.length} sessions for alumni');
+          return snapshot.docs
+              .map((doc) => SessionBooking.fromMap(doc.data(), doc.id))
+              .toList();
+        });
+  }
+
+  /// Stream pending sessions for an alumni (uses client-side filtering)
+  Stream<List<SessionBooking>> streamPendingSessionsForAlumni(String alumniId) {
+    return streamAllSessionsForAlumni(alumniId).map((sessions) {
+      final pending = sessions.where((s) => s.status == 'pending').toList();
+      print('⏳ Pending sessions: ${pending.length}');
+      return pending..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    });
+  }
+
+  /// Stream accepted sessions for an alumni (uses client-side filtering)
+  Stream<List<SessionBooking>> streamAcceptedSessionsForAlumni(String alumniId) {
+    return streamAllSessionsForAlumni(alumniId).map((sessions) {
+      final accepted = sessions.where((s) => s.status == 'accepted').toList();
+      print('✅ Accepted sessions: ${accepted.length}');
+      return accepted..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    });
+  }
+
+  /// Stream all sessions for a student
+  Stream<List<SessionBooking>> streamSessionsForStudent(String studentId) {
+    return _sessionBookingsCollection
+        .where('studentId', isEqualTo: studentId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => SessionBooking.fromMap(doc.data(), doc.id))
+            .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  }
+
+  /// Update session status
+  Future<void> updateSessionStatus(String sessionId, String status, {String? meetingLink}) async {
+    final updates = <String, dynamic>{'status': status};
+
+    // Generate meeting link if accepting and none provided
+    if (status == 'accepted' && meetingLink == null) {
+      // Create a unique room name for the meeting
+      updates['meetingLink'] = 'session_${const Uuid().v4().substring(0, 8)}';
+    } else if (meetingLink != null) {
+      updates['meetingLink'] = meetingLink;
+    }
+
+    await _sessionBookingsCollection.doc(sessionId).update(updates);
+
+    // Increment session counts if completed
+    if (status == 'completed') {
+      try {
+        final doc = await _sessionBookingsCollection.doc(sessionId).get();
+        if (doc.exists) {
+          final data = doc.data();
+          if (data != null) {
+            final studentId = data['studentId'];
+            final alumniId = data['alumniId'];
+
+            // Increment for student and add XP
+            await _usersCollection.doc(studentId).update({
+              'totalSessions': FieldValue.increment(1),
+              'xp': FieldValue.increment(50),
+            });
+
+            // Increment for alumni
+            await _usersCollection.doc(alumniId).update({
+              'totalSessions': FieldValue.increment(1),
+            });
+          }
+        }
+      } catch (e) {
+        print('Error updating session counts: $e');
+      }
+    }
+  }
+
+  /// Get pending sessions count for alumni
+  Future<int> getPendingSessionsCount(String alumniId) async {
+    final snapshot = await _sessionBookingsCollection
+        .where('alumniId', isEqualTo: alumniId)
+        .get();
+    return snapshot.docs.where((doc) => doc.data()['status'] == 'pending').length;
   }
 }

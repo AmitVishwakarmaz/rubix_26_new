@@ -184,3 +184,73 @@ class Event {
     );
   }
 }
+
+/// SessionBooking model for storing session booking data in Firestore
+class SessionBooking {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String alumniId;
+  final String alumniName;
+  final String purpose;
+  final String duration;
+  final String date;
+  final String time;
+  final String notes;
+  final String status; // 'pending', 'accepted', 'rejected', 'completed'
+  final DateTime createdAt;
+  final String? meetingLink;
+
+  SessionBooking({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.alumniId,
+    required this.alumniName,
+    required this.purpose,
+    required this.duration,
+    required this.date,
+    required this.time,
+    required this.notes,
+    required this.status,
+    required this.createdAt,
+    this.meetingLink,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'studentId': studentId,
+      'studentName': studentName,
+      'alumniId': alumniId,
+      'alumniName': alumniName,
+      'purpose': purpose,
+      'duration': duration,
+      'date': date,
+      'time': time,
+      'notes': notes,
+      'status': status,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'meetingLink': meetingLink,
+    };
+  }
+
+  factory SessionBooking.fromMap(Map<String, dynamic> map, String id) {
+    return SessionBooking(
+      id: id,
+      studentId: map['studentId'] ?? '',
+      studentName: map['studentName'] ?? '',
+      alumniId: map['alumniId'] ?? '',
+      alumniName: map['alumniName'] ?? '',
+      purpose: map['purpose'] ?? '',
+      duration: map['duration'] ?? '',
+      date: map['date'] ?? '',
+      time: map['time'] ?? '',
+      notes: map['notes'] ?? '',
+      status: map['status'] ?? 'pending',
+      createdAt: map['createdAt'] != null 
+          ? (map['createdAt'] as Timestamp).toDate() 
+          : DateTime.now(),
+      meetingLink: map['meetingLink'],
+    );
+  }
+}

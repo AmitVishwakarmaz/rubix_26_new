@@ -13,6 +13,7 @@ import 'ai_chat_screen.dart';
 import 'alumni/mentorship_requests_screen.dart';
 import 'alumni/post_job_screen.dart';
 import 'alumni/my_mentees_screen.dart';
+import 'alumni/pending_sessions_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 import 'community/community_screen.dart';
@@ -71,13 +72,9 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     }
 
     final List<Widget> screens = [
-      Navigator(
-        onGenerateRoute: (settings) {
-          return MaterialPageRoute(
-            builder: (_) => _buildHomeContent(isDark, uid),
-          );
-        },
-      ),
+      _buildHomeContent(isDark, uid),
+      const CommunityScreen(),
+      const AlumniConnectScreen(),
       const ProfileScreen(),
     ];
 
@@ -122,7 +119,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                     isDark,
                     () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
+                      MaterialPageRoute(builder: (_) => const PendingSessionsScreen()),
                     ),
                   ),
                 ),
@@ -386,76 +383,205 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
   }
 
   Widget _buildPendingRequestsPreview(bool isDark, String uid) {
-    return StreamBuilder<List<MentorshipRequest>>(
-      stream: _firestoreService.getMentorshipRequestsForAlumni(uid),
-      builder: (context, snapshot) {
-        final requests = snapshot.data?.where((r) => r.status == 'pending').toList() ?? [];
+    return Column(
+      children: [
+        // Mentorship Requests
+        StreamBuilder<List<MentorshipRequest>>(
+          stream: _firestoreService.getMentorshipRequestsForAlumni(uid),
+          builder: (context, snapshot) {
+            final requests = snapshot.data?.where((r) => r.status == 'pending').toList() ?? [];
 
-        if (requests.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 0,
-              color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
-              child: const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text("No pending mentorship requests."),
-              ),
-            ),
-          );
-        }
+            if (requests.isEmpty) return const SizedBox.shrink();
 
-        final latest = requests.first;
+            final latest = requests.first;
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: const Color(0xFF6C63FF),
-                    child: Text(latest.studentName[0], style: const TextStyle(color: Colors.white)),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${latest.studentName} sent a request',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        Text(
-                          latest.message,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                        child: const Icon(Icons.person_add_rounded, color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${latest.studentName} wants to connect',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              latest.message,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${requests.length} new',
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
-                ],
+                ),
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        // Session Booking Requests
+        StreamBuilder<List<SessionBooking>>(
+          stream: _firestoreService.streamPendingSessionsForAlumni(uid),
+          builder: (context, sessionSnapshot) {
+            final sessions = sessionSnapshot.data ?? [];
+
+            if (sessions.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+                  child: const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text("No pending session requests."),
+                  ),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PendingSessionsScreen()),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      ...sessions.take(3).map((session) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF00D4AA), Color(0xFF4ECDC4)],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.calendar_today_rounded, color: Colors.white, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${session.studentName} - Session Request',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    '${session.purpose} • ${session.date} at ${session.time}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white70 : Colors.black54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF00D4AA)),
+                                  onPressed: () async {
+                                    await _firestoreService.updateSessionStatus(session.id, 'accepted');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Session accepted!')),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.cancel_rounded, color: Colors.red),
+                                  onPressed: () async {
+                                    await _firestoreService.updateSessionStatus(session.id, 'rejected');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Session rejected')),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      )),
+                      if (sessions.length > 3)
+                        Text(
+                          '+ ${sessions.length - 3} more requests',
+                          style: TextStyle(
+                            color: const Color(0xFF6C63FF),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -733,11 +859,11 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildNavItem(0, Icons.dashboard_rounded, 'Home', null),
-              _buildNavItem(-1, Icons.explore_rounded, 'Explore', const CommunityScreen()),
+              _buildNavItem(0, Icons.dashboard_rounded, 'Home'),
+              _buildNavItem(1, Icons.groups_rounded, 'Community'),
               const SizedBox(width: 64),
-              _buildNavItem(-1, Icons.connect_without_contact, 'Connect', const AlumniConnectScreen()),
-              _buildNavItem(1, Icons.person_rounded, 'Profile', null),
+              _buildNavItem(2, Icons.connect_without_contact, 'Connect'),
+              _buildNavItem(3, Icons.person_rounded, 'Profile'),
             ],
           ),
         ),
@@ -745,16 +871,10 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label, Widget? screen) {
-    final isSelected = _selectedIndex == index && index >= 0;
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _selectedIndex == index;
     return GestureDetector(
-      onTap: () {
-        if (screen != null) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-        } else if (index >= 0) {
-          setState(() => _selectedIndex = index);
-        }
-      },
+      onTap: () => setState(() => _selectedIndex = index),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
