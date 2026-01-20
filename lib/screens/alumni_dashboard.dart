@@ -4,14 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
+import '../models/new_model.dart'; // assuming MentorshipRequest is here
 
 import 'resources_screen.dart';
 import 'events_screen.dart';
 import 'profile_screen.dart';
 import 'ai_chat_screen.dart';
-import 'auth_screen.dart';
-// import 'mentee_requests_screen.dart';     // uncomment when ready
-// import 'job_posting_screen.dart';        // uncomment when ready
+import 'alumni/mentorship_requests_screen.dart';
+import 'alumni/post_job_screen.dart';
+import 'alumni/my_mentees_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 
@@ -27,145 +28,176 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
 
   final _authService = AuthService();
   final _firestoreService = FirestoreService();
-  AppUser? _userProfile;
+
+  AppUser? _userProfile; // kept for quick access + compatibility
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _loadInitialUserProfile();
   }
 
-  Future<void> _loadUserProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final profile = await _firestoreService.getUser(user.uid);
-      if (mounted) {
-        setState(() => _userProfile = profile);
-      }
+  Future<void> _loadInitialUserProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final profile = await _firestoreService.getUser(uid);
+    if (mounted) {
+      setState(() => _userProfile = profile);
     }
   }
 
   bool get isVerified => _userProfile?.isVerified ?? false;
 
+  void _showVerificationRequired() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Profile verification required to access this feature'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentUser = FirebaseAuth.instance.currentUser;
+    final uid = currentUser?.uid;
+
+    if (uid == null) {
+      return const Center(child: Text('Not signed in'));
+    }
+
+    final List<Widget> screens = [
+      _buildHomeContent(isDark, uid),
+      const ProfileScreen(),
+    ];
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0F0F1E), const Color(0xFF1A1A2E)]
-                : [const Color(0xFFF8F9FE), const Color(0xFFFFFFFF)],
-          ),
-        ),
-        child: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: _buildHeader(isDark, currentUser),
-              ),
-              if (_userProfile != null)
-                SliverToBoxAdapter(child: _buildVerificationBanner()),
-              SliverToBoxAdapter(child: _buildStatsSection(isDark)),
-              SliverToBoxAdapter(
-                child: _buildSectionTitle(
-                  'Pending Requests',
-                  'View All',
-                  isDark,
-                  () {
-                    // TODO: Navigate to Mentee Requests screen when implemented
-                    if (!isVerified) {
-                      _showVerificationRequired();
-                    }
-                  },
-                ),
-              ),
-              SliverToBoxAdapter(child: _buildQuickActions(isDark)),
-              SliverToBoxAdapter(
-                child: _buildSectionTitle('Alumni Tools', '', isDark, null),
-              ),
-              SliverToBoxAdapter(child: _buildFeatureGrid(isDark)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Verification',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (!isVerified)
-                        _buildVerificationButton(
-                          icon: Icons.verified_user,
-                          title: 'Request University/Alumni Verification',
-                          subtitle: 'Verify your alumni status',
-                          color: Colors.blue.shade600,
-                          onTap: () {
-                            if (currentUser != null && _userProfile != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => VerificationRequestScreen(
-                                    userId: currentUser.uid,
-                                    name: _userProfile!.name,
-                                    email: _userProfile!.email,
-                                    role: 'alumni',
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                        ),
-                      const SizedBox(height: 16),
-                      _buildVerificationButton(
-                        icon: Icons.qr_code_scanner,
-                        title: 'Verify QR Code',
-                        subtitle: 'Scan or upload your alumni QR',
-                        color: Colors.green.shade600,
-                        onTap: () {
-                          if (currentUser != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => QrVerificationScreen(userId: currentUser.uid),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-        ),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: screens,
       ),
-      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButton: _buildFloatingActionButton(isDark),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _buildBottomNavBar(isDark),
     );
   }
 
-  void _showVerificationRequired() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile verification required')),
+  Widget _buildHomeContent(bool isDark, String uid) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF0F0F1E), const Color(0xFF1A1A2E)]
+              : [const Color(0xFFF8F9FE), const Color(0xFFFFFFFF)],
+        ),
+      ),
+      child: SafeArea(
+        child: StreamBuilder<AppUser?>(
+          stream: _firestoreService.streamUser(uid),
+          builder: (context, snapshot) {
+            final user = snapshot.data;
+            _userProfile = user; // keep local copy in sync
+
+            return CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _buildHeader(isDark, user)),
+                if (user != null) SliverToBoxAdapter(child: _buildVerificationBanner(user)),
+                SliverToBoxAdapter(child: _buildStatsSection(isDark, uid)),
+                SliverToBoxAdapter(
+                  child: _buildSectionTitle(
+                    'Pending Requests',
+                    'View All',
+                    isDark,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildPendingRequestsPreview(isDark, uid)),
+                SliverToBoxAdapter(child: _buildQuickActions(isDark)),
+                SliverToBoxAdapter(
+                  child: _buildSectionTitle('Alumni Tools', '', isDark, null),
+                ),
+                SliverToBoxAdapter(child: _buildFeatureGrid(isDark)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Verification',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (!(user?.isVerified ?? false))
+                          _buildVerificationButton(
+                            icon: Icons.verified_user,
+                            title: 'Request University/Alumni Verification',
+                            subtitle: 'Verify your alumni status',
+                            color: Colors.blue.shade600,
+                            onTap: () {
+                              final currentUser = FirebaseAuth.instance.currentUser;
+                              if (user != null && currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: currentUser.uid,
+                                      name: user.name,
+                                      email: user.email,
+                                      role: 'alumni',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        const SizedBox(height: 16),
+                        _buildVerificationButton(
+                          icon: Icons.qr_code_scanner,
+                          title: 'Verify QR Code',
+                          subtitle: 'Scan or upload your alumni QR',
+                          color: Colors.green.shade600,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => QrVerificationScreen(userId: uid),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
-  Widget _buildHeader(bool isDark, User? currentUser) {
+  // ──────────────────────────────────────────────
+  //  Header, Banner, Stats, Requests, Quick Actions, Grid, FAB, BottomNav
+  // ──────────────────────────────────────────────
+
+  Widget _buildHeader(bool isDark, AppUser? user) {
+    final name = user?.name ?? 'Alumni';
+    final imageUrl = user?.profileImageUrl;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -174,10 +206,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           Row(
             children: [
               GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                ),
+                onTap: () => setState(() => _selectedIndex = 1),
                 child: Container(
                   width: 56,
                   height: 56,
@@ -185,8 +214,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
                     border: Border.all(color: Colors.white, width: 3),
+                    image: imageUrl != null
+                        ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                        : null,
                   ),
-                  child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28),
+                  child: imageUrl == null
+                      ? const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28)
+                      : null,
                 ),
               ),
               const SizedBox(width: 16),
@@ -200,12 +234,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _userProfile?.name ?? currentUser?.displayName ?? 'Mentor',
+                      name,
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ),
+              _buildNotificationIcon(isDark),
             ],
           ),
           const SizedBox(height: 24),
@@ -215,18 +250,17 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     );
   }
 
-  Widget _buildVerificationBanner() {
-    final profile = _userProfile!;
+  Widget _buildVerificationBanner(AppUser user) {
     Color bgColor, textColor;
     IconData icon;
     String message;
 
-    if (profile.isVerified) {
+    if (user.isVerified) {
       bgColor = Colors.green.shade50;
       textColor = Colors.green.shade700;
       icon = Icons.verified_user;
       message = 'Your alumni profile is verified! Full access granted.';
-    } else if (profile.isRejected) {
+    } else if (user.isRejected == true) {
       bgColor = Colors.red.shade50;
       textColor = Colors.red.shade700;
       icon = Icons.cancel;
@@ -263,94 +297,184 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     );
   }
 
-  Widget _buildStatsSection(bool isDark) {
+  Widget _buildStatsSection(bool isDark, String uid) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
           Expanded(
-            child: _buildStatCard(
-              isDark,
-              icon: Icons.school_rounded,
-              label: 'Mentees',
-              value: '4',
-              gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
+            child: StreamBuilder<List<MentorshipRequest>>(
+              stream: _firestoreService.getMyMentees(uid),
+              builder: (context, snapshot) {
+                final count = snapshot.data?.length ?? 0;
+                return _buildStatCard(
+                  isDark,
+                  icon: Icons.school_rounded,
+                  label: 'Mentees',
+                  value: '$count',
+                  gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
+                );
+              },
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: _buildStatCard(
-              isDark,
-              icon: Icons.video_camera_front_rounded,
-              label: 'Hours',
-              value: '42',
-              gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
-            ),
+          StreamBuilder<AppUser?>(
+            stream: _firestoreService.streamUser(uid),
+            builder: (context, snapshot) {
+              final sessions = snapshot.data?.totalSessions ?? 0;
+              return Expanded(
+                child: _buildStatCard(
+                  isDark,
+                  icon: Icons.video_camera_front_rounded,
+                  label: 'Sessions',
+                  value: '$sessions',
+                  gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: _buildStatCard(
-              isDark,
-              icon: Icons.star_rounded,
-              label: 'Rating',
-              value: '4.9',
-              gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
-            ),
+          StreamBuilder<AppUser?>(
+            stream: _firestoreService.streamUser(uid),
+            builder: (context, snapshot) {
+              final level = (snapshot.data?.xp ?? 0) ~/ 100 + 1;
+              return Expanded(
+                child: _buildStatCard(
+                  isDark,
+                  icon: Icons.emoji_events_rounded,
+                  label: 'Level',
+                  value: '$level',
+                  gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
+                ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
+  Widget _buildPendingRequestsPreview(bool isDark, String uid) {
+    return StreamBuilder<List<MentorshipRequest>>(
+      stream: _firestoreService.getMentorshipRequestsForAlumni(uid),
+      builder: (context, snapshot) {
+        final requests = snapshot.data?.where((r) => r.status == 'pending').toList() ?? [];
+
+        if (requests.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
+              color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+              child: const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text("No pending mentorship requests."),
+              ),
+            ),
+          );
+        }
+
+        final latest = requests.first;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: const Color(0xFF6C63FF),
+                    child: Text(latest.studentName[0], style: const TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${latest.studentName} sent a request',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          latest.message,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildQuickActions(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: GestureDetector(
-        onTap: isVerified
-            ? () {
-                // TODO: Navigate to mentee requests screen
-              }
-            : _showVerificationRequired,
-        child: Opacity(
-          opacity: isVerified ? 1.0 : 0.75,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(color: const Color(0xFF00D4AA).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                  child: const Icon(Icons.handshake_rounded, color: Colors.white, size: 32),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF00D4AA).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(width: 16),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'New Mentorship Request',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Review student profile',
-                        style: TextStyle(fontSize: 14, color: Colors.white70),
-                      ),
-                    ],
-                  ),
+                child: const Icon(Icons.handshake_rounded, color: Colors.white, size: 32),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'View All Requests',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Review student profiles',
+                      style: TextStyle(fontSize: 14, color: Colors.white70),
+                    ),
+                  ],
                 ),
-                if (!isVerified) const Icon(Icons.lock, color: Colors.white70, size: 20),
-                if (isVerified) const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
-              ],
-            ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+            ],
           ),
         ),
       ),
@@ -363,29 +487,29 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
         'icon': Icons.campaign_rounded,
         'title': 'Post a Job',
         'color': const Color(0xFF6C63FF),
+        'screen': const PostJobScreen(),
         'locked': !isVerified,
-        // 'screen': const JobPostingScreen(), // uncomment when ready
       },
       {
         'icon': Icons.groups_rounded,
         'title': 'My Mentees',
         'color': const Color(0xFFFF6B9D),
+        'screen': const MyMenteesScreen(),
         'locked': false,
-        // 'screen': const MenteeListScreen(), // when ready
       },
       {
         'icon': Icons.event_available_rounded,
         'title': 'Manage Events',
         'color': const Color(0xFFFFA726),
-        'locked': false,
         'screen': const EventsScreen(),
+        'locked': false,
       },
       {
         'icon': Icons.auto_stories_rounded,
         'title': 'Knowledge Base',
         'color': const Color(0xFF00D4AA),
-        'locked': false,
         'screen': const ResourcesScreen(),
+        'locked': false,
       },
     ];
 
@@ -409,10 +533,8 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                 _showVerificationRequired();
                 return;
               }
-              final screen = f['screen'] as Widget?;
-              if (screen != null) {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-              }
+              final screen = f['screen'] as Widget;
+              Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
             },
             child: Opacity(
               opacity: f['locked'] == true ? 0.6 : 1.0,
@@ -450,7 +572,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     );
   }
 
-  Widget _buildFloatingActionButton() {
+  Widget _buildFloatingActionButton(bool isDark) {
     return Container(
       width: 64,
       height: 64,
@@ -471,7 +593,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
   }
 
   // ──────────────────────────────────────────────
-  //  Reusable helpers (kept from your original + minor tweaks)
+  //  Reusable small widgets (mostly unchanged)
   // ──────────────────────────────────────────────
 
   Widget _buildSearchBox(bool isDark) {
@@ -558,7 +680,10 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           if (action.isNotEmpty)
             TextButton(
               onPressed: onTap,
-              child: Text(action, style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.w600)),
+              child: Text(
+                action,
+                style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.w600),
+              ),
             ),
         ],
       ),
@@ -578,10 +703,8 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildNavItem(0, Icons.dashboard_rounded, 'Home', null),
-              // _buildNavItem(1, Icons.people_alt_rounded, 'Mentees', const MenteeRequestsScreen()),
               const SizedBox(width: 64),
-              // _buildNavItem(2, Icons.work_rounded, 'Jobs', const JobPostingScreen()),
-              _buildNavItem(3, Icons.person_rounded, 'Profile', const ProfileScreen()),
+              _buildNavItem(1, Icons.person_rounded, 'Profile', null),
             ],
           ),
         ),
@@ -594,14 +717,16 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     return GestureDetector(
       onTap: () {
         setState(() => _selectedIndex = index);
-        if (screen != null) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-        }
+        // screen navigation not used here (already using IndexedStack)
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: isSelected ? const Color(0xFF6C63FF) : Colors.grey, size: 28),
+          Icon(
+            icon,
+            color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
+            size: 28,
+          ),
           const SizedBox(height: 4),
           Text(
             label,

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../models/new_model.dart';
 
 /// Service for Firestore database operations
 class FirestoreService {
@@ -103,5 +104,43 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs
             .map((doc) => AppUser.fromMap(doc.data(), doc.id))
             .toList());
+  }
+  /// Stream user data
+  Stream<AppUser?> streamUser(String userId) {
+    return _usersCollection.doc(userId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return AppUser.fromMap(doc.data()!, doc.id);
+    });
+  }
+
+  /// Get mentees for an alumni (accepted requests)
+  Stream<List<MentorshipRequest>> getMyMentees(String alumniId) {
+    return _firestore.collection('mentorship_requests')
+        .where('alumniId', isEqualTo: alumniId)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Get all mentorship requests for an alumni
+  Stream<List<MentorshipRequest>> getMentorshipRequestsForAlumni(String alumniId) {
+    return _firestore.collection('mentorship_requests')
+        .where('alumniId', isEqualTo: alumniId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Create a job post
+  Future<void> createJobPost(JobPost job) async {
+    await _firestore.collection('jobs').doc(job.id).set(job.toMap());
+  }
+
+  /// Update mentorship request status
+  Future<void> updateRequestStatus(String requestId, String status) async {
+    await _firestore.collection('mentorship_requests').doc(requestId).update({'status': status});
   }
 }

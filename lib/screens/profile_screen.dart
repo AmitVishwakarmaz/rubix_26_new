@@ -1,11 +1,14 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import '../services/auth_service.dart';
-import 'auth_screen.dart'; // ← make sure this contains LoginScreen
+import '../services/firestore_service.dart';
+import '../models/user_model.dart';
+import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({Key? key}) : super(key: key);
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -13,387 +16,588 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  bool _notificationsEnabled = true;
-  bool _darkModeEnabled = false;
-
-  String? _userId;
-
-  @override
-  void initState() {
-    super.initState();
-    _userId = _auth.currentUser?.uid;
-  }
-
-  Map<String, dynamic> _defaultProfile() {
-    return {
-      'name': 'User',
-      'email': _auth.currentUser?.email ?? 'No email',
-      'university': 'Unknown',
-      'major': 'Unknown',
-      'gradYear': '—',
-      'level': 1,
-      'xp': 0,
-      'xpToNextLevel': 1000,
-      'sessionsCompleted': 0,
-      'mentorsConnected': 0,
-      'eventsAttended': 0,
-      'skills': <String>[],
-      'interests': <String>[],
-    };
-  }
-
-  Map<String, dynamic> _getProfileData(DocumentSnapshot? doc) {
-    if (doc == null || !doc.exists) {
-      return _defaultProfile();
-    }
-
-    return {
-      'name': doc.get('name') as String? ?? 'User',
-      'email': doc.get('email') as String? ?? _auth.currentUser?.email ?? 'No email',
-      'university': doc.get('university') as String? ?? 'Unknown',
-      'major': doc.get('major') as String? ?? 'Unknown',
-      'gradYear': doc.get('gradYear') as String? ?? '—',
-      'level': (doc.get('level') as num?)?.toInt() ?? 1,
-      'xp': (doc.get('xp') as num?)?.toDouble() ?? 0.0,
-      'xpToNextLevel': (doc.get('xpToNextLevel') as num?)?.toDouble() ?? 1000.0,
-      'sessionsCompleted': (doc.get('sessionsCompleted') as num?)?.toInt() ?? 0,
-      'mentorsConnected': (doc.get('mentorsConnected') as num?)?.toInt() ?? 0,
-      'eventsAttended': (doc.get('eventsAttended') as num?)?.toInt() ?? 0,
-      'skills': (doc.get('skills') as List<dynamic>?)?.cast<String>() ?? <String>[],
-      'interests': (doc.get('interests') as List<dynamic>?)?.cast<String>() ?? <String>[],
-    };
-  }
+  final FirestoreService _firestoreService = FirestoreService();
+  final ImagePicker _picker = ImagePicker();
+  
+  bool _isUploading = false;
 
   Future<void> _handleLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await _authService.signOut();
-      if (!mounted) return;
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen(role: '')),
+    await _authService.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen(role: 'student')), // Passing default role as it's unused but required
         (route) => false,
       );
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Future<void> _pickAndUploadImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
 
-    if (_userId == null) {
-      return Scaffold(
-        body: Center(
-          child: Text(
-            'Not signed in',
-            style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
-          ),
-        ),
-      );
+      setState(() => _isUploading = true);
+
+      final user = _authService.currentUser;
+      if (user == null) return;
+
+      // Upload to Firebase Storage
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('user_avatars')
+          .child('${user.uid}.jpg');
+
+      await ref.putFile(File(image.path));
+      final url = await ref.getDownloadURL();
+
+      // Update Firestore
+      await _firestoreService.updateUserProfile(user.uid, {'profileImageUrl': url});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile picture updated!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
     }
-
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF0F0F1E), const Color(0xFF1A1A2E)]
-                : [const Color(0xFFF8F9FE), const Color(0xFFFFFFFF)],
-          ),
-        ),
-        child: SafeArea(
-          child: StreamBuilder<DocumentSnapshot>(
-            stream: _firestore.collection('users').doc(_userId).snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Error loading profile',
-                        style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        snapshot.error.toString(),
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final profile = _getProfileData(snapshot.data);
-
-              return CustomScrollView(
-                slivers: [
-                  _buildHeader(isDark),
-                  SliverToBoxAdapter(child: _buildProfileHeader(isDark, profile)),
-                  SliverToBoxAdapter(child: _buildLevelProgress(isDark, profile)),
-                  SliverToBoxAdapter(child: _buildStatsGrid(isDark, profile)),
-                  SliverToBoxAdapter(child: _buildSkillsSection(isDark, profile)),
-                  SliverToBoxAdapter(child: _buildMenuSection(isDark)),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
   }
 
-  Widget _buildHeader(bool isDark) {
-    return SliverAppBar(
-      expandedHeight: 0,
-      floating: true,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: IconButton(
-        onPressed: () => Navigator.pop(context),
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.arrow_back_rounded),
-        ),
-      ),
-      actions: [
-        IconButton(
-          onPressed: () {
-            // TODO: Settings screen
-          },
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.settings_rounded),
-          ),
-        ),
-        const SizedBox(width: 16),
-      ],
-    );
-  }
+  Future<void> _showEditProfileDialog(AppUser user) async {
+    final nameController = TextEditingController(text: user.name);
+    final roleController = TextEditingController(text: user.jobRole ?? ''); // Or degree for student
+    final companyController = TextEditingController(text: user.currentCompany ?? user.university ?? '');
+    final bioController = TextEditingController(text: user.role == 'student' ? user.major : user.industry); // Reusing fields as "Bio" is not in model yet, using existing fields for now or adding bio. 
+    // Actually simpler to just edit existing fields.
+    final linkedinController = TextEditingController(text: user.linkedinUrl ?? '');
 
-  Widget _buildProfileHeader(bool isDark, Map<String, dynamic> profile) {
-    final name = profile['name'] as String? ?? 'User';
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6C63FF).withOpacity(0.3),
-                      blurRadius: 40,
-                      offset: const Offset(0, 20),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: const TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Full Name'),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () {
-                    // TODO: Implement profile picture change
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)],
-                      ),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isDark ? const Color(0xFF0F0F1E) : Colors.white,
-                        width: 3,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt_rounded,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                  ),
+              const SizedBox(height: 16),
+              if (user.isAlumni) ...[
+                TextField(
+                  controller: roleController,
+                  decoration: const InputDecoration(labelText: 'Job Role'),
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: companyController,
+                  decoration: const InputDecoration(labelText: 'Current Company'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: bioController,
+                  decoration: const InputDecoration(labelText: 'Industry'),
+                ),
+              ] else ...[
+                TextField(
+                  controller: companyController,
+                  decoration: const InputDecoration(labelText: 'University'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: roleController,
+                  decoration: const InputDecoration(labelText: 'Degree'),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: bioController,
+                  decoration: const InputDecoration(labelText: 'Major'),
+                ),
+              ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: linkedinController,
+                decoration: const InputDecoration(labelText: 'LinkedIn URL'),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Text(
-            name,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-          const SizedBox(height: 8),
-          Text(
-            profile['email'] as String? ?? 'No email',
-            style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.school_rounded, size: 18, color: Color(0xFF6C63FF)),
-                const SizedBox(width: 8),
-                Text(
-                  '${profile['university']} • ${profile['major']}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final updates = {
+                'name': nameController.text.trim(),
+                'linkedinUrl': linkedinController.text.trim(),
+              };
+              
+              if (user.isAlumni) {
+                updates['jobRole'] = roleController.text.trim();
+                updates['currentCompany'] = companyController.text.trim();
+                updates['industry'] = bioController.text.trim();
+              } else {
+                updates['degree'] = roleController.text.trim();
+                updates['university'] = companyController.text.trim();
+                updates['major'] = bioController.text.trim();
+              }
+              
+              await _firestoreService.updateUserProfile(user.userId, updates);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
     );
   }
+  
+  Future<void> _showEditTagsDialog(
+    AppUser user, 
+    String title, 
+    List<String> currentTags, 
+    List<String> suggestions,
+    String fieldName
+  ) async {
+    final List<String> selectedTags = List.from(currentTags);
+    final textController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('Edit $title'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: selectedTags.map((tag) => Chip(
+                      label: Text(tag),
+                      onDeleted: () => setState(() => selectedTags.remove(tag)),
+                      deleteIcon: const Icon(Icons.close, size: 18),
+                      backgroundColor: const Color(0xFF6C63FF).withOpacity(0.1),
+                      labelStyle: const TextStyle(color: Color(0xFF6C63FF)),
+                    )).toList(),
+                   ),
+                   const SizedBox(height: 16),
+                   TextField(
+                     controller: textController,
+                     decoration: InputDecoration(
+                       labelText: 'Add Custom $title',
+                       suffixIcon: IconButton(
+                         icon: const Icon(Icons.add),
+                         onPressed: () {
+                           if (textController.text.isNotEmpty) {
+                             setState(() {
+                               if (!selectedTags.contains(textController.text.trim())) {
+                                 selectedTags.add(textController.text.trim());
+                               }
+                               textController.clear();
+                             });
+                           }
+                         },
+                       ),
+                       border: const OutlineInputBorder(),
+                     ),
+                     onSubmitted: (value) {
+                       if (value.isNotEmpty) {
+                         setState(() {
+                           if (!selectedTags.contains(value.trim())) {
+                             selectedTags.add(value.trim());
+                           }
+                           textController.clear();
+                         });
+                       }
+                     },
+                   ),
+                   const SizedBox(height: 16),
+                   const Text('Suggestions', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                   const SizedBox(height: 8),
+                   Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: suggestions
+                      .where((s) => !selectedTags.contains(s))
+                      .map((s) => ActionChip(
+                        label: Text(s),
+                        onPressed: () => setState(() => selectedTags.add(s)),
+                      )).toList(),
+                   ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                   Navigator.pop(context);
+                   await _firestoreService.updateUserProfile(user.userId, {fieldName: selectedTags});
+                }, 
+                child: const Text('Save')
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
 
-  Widget _buildLevelProgress(bool isDark, Map<String, dynamic> profile) {
-    final xp = profile['xp'] as double;
-    final xpToNext = profile['xpToNextLevel'] as double;
-    final progress = (xpToNext > 0) ? (xp / xpToNext).clamp(0.0, 1.0) : 0.0;
+  @override
+  Widget build(BuildContext context) {
+    final user = _authService.currentUser;
+    if (user == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
+    return StreamBuilder<AppUser?>(
+      stream: _firestoreService.streamUser(user.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(body: Center(child: Text("Error: ${snapshot.error}")));
+        }
+        
+        final appUser = snapshot.data;
+        if (appUser == null) {
+             return const Scaffold(body: Center(child: Text("User profile not found.")));
+        }
+
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return Scaffold(
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [const Color(0xFF0F0F1E), const Color(0xFF1A1A2E)]
+                    : [const Color(0xFFF8F9FE), const Color(0xFFFFFFFF)],
+              ),
+            ),
+            child: Column(
+              children: [
+                _buildHeader(isDark),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() {}); 
+                    },
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 100),
+                      child: Column(
+                        children: [
+                          _buildProfileCard(appUser, isDark),
+                          const SizedBox(height: 24),
+                          _buildLevelProgress(appUser, isDark),
+                          const SizedBox(height: 24),
+                          _buildStatsGrid(appUser, isDark),
+                          const SizedBox(height: 24),
+                          _buildSectionWithChips(
+                            context: context,
+                            title: 'Skills', 
+                            tags: appUser.skills ?? [], 
+                            isDark: isDark,
+                            onEdit: () => _showEditTagsDialog(
+                              appUser, 
+                              'Skills', 
+                              appUser.skills ?? [], 
+                              ['Flutter', 'React', 'Python', 'Java', 'UI/UX', 'Product Management'], // Common suggestions
+                              'skills'
+                            )
+                          ),
+                          const SizedBox(height: 24),
+                          if (appUser.isStudent) ...[
+                            _buildSectionWithChips(
+                              context: context,
+                              title: 'Interests', 
+                              tags: appUser.careerInterests ?? [], 
+                              isDark: isDark,
+                              accentColor: const Color(0xFFFF6B9D),
+                              onEdit: () => _showEditTagsDialog(
+                                appUser, 
+                                'Interests', 
+                                appUser.careerInterests ?? [], 
+                                ['Software Development', 'Data Science', 'AI', 'Startup', 'Finance'], // Common suggestions
+                                'careerInterests'
+                              )
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                           Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _handleLogout,
+                                icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                                label: const Text("Log Out", style: TextStyle(color: Colors.redAccent)),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.redAccent),
+                                  padding: const EdgeInsets.all(16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader(bool isDark) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'My Profile',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            IconButton(
+              onPressed: () {
+                // Navigate to settings if implemented
+              },
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.settings_rounded),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileCard(AppUser user, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
-          borderRadius: BorderRadius.circular(24),
+          color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+          borderRadius: BorderRadius.circular(32),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF6C63FF).withOpacity(0.3),
+              color: const Color(0xFF6C63FF).withOpacity(0.1),
               blurRadius: 30,
               offset: const Offset(0, 15),
             ),
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                GestureDetector(
+                  onTap: _pickAndUploadImage,
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF6C63FF + (user.name.hashCode % 1000)),
+                          Color(0xFF4E9FFF + (user.name.hashCode % 1000)),
+                        ],
+                      ),
+                      image: user.profileImageUrl != null
+                        ? DecorationImage(image: NetworkImage(user.profileImageUrl!), fit: BoxFit.cover)
+                        : null,
+                    ),
+                    child: user.profileImageUrl == null
+                        ? Center(
+                          child: Text(
+                            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
+                        : null,
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6C63FF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: _isUploading 
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.edit_rounded, color: Colors.white, size: 16),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Text(
+              user.name,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            Text(
+              user.isAlumni 
+                  ? '${user.jobRole ?? 'Alumni'} at ${user.currentCompany ?? 'Unknown Company'}'
+                  : '${user.major ?? 'Student'} at ${user.university ?? 'Unknown University'}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            ElevatedButton.icon(
+              onPressed: () => _showEditProfileDialog(user),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit Profile'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                backgroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLevelProgress(AppUser user, bool isDark) {
+    // XP Logic: 100 XP per level
+    final currentLevel = (user.xp / 100).floor() + 1;
+    final progress = (user.xp % 100) / 100.0;
+    final rank = user.rank;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black12,
+          ),
+        ),
+        child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
+                    Text(
+                      'Level $currentLevel',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: const Icon(Icons.emoji_events_rounded, color: Colors.white, size: 24),
                     ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Your Level', style: TextStyle(fontSize: 14, color: Colors.white70)),
-                        Text(
-                          'Level ${profile['level']}',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                      ],
+                    const SizedBox(height: 4),
+                    Text(
+                      '${user.xp} XP',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
                     ),
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: const Color(0xFF00D4AA).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${xp.toInt()} XP',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    rank, 
+                    style: const TextStyle(
+                      color: Color(0xFF00D4AA),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${(xpToNext - xp).toInt()} XP to Level ${(profile['level'] as int) + 1}',
-                  style: const TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-                Text(
-                  '${(progress * 100).toInt()}%',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: progress,
-                backgroundColor: Colors.white.withOpacity(0.2),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
+                color: const Color(0xFF00D4AA),
                 minHeight: 8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${100 - (user.xp % 100)} XP to reach Level ${currentLevel + 1}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white54 : Colors.black45,
               ),
             ),
           ],
@@ -402,38 +606,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatsGrid(bool isDark, Map<String, dynamic> profile) {
+  Widget _buildStatsGrid(AppUser user, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
           Expanded(
             child: _buildStatCard(
               isDark,
-              Icons.videocam_rounded,
-              'Sessions',
-              '${profile['sessionsCompleted']}',
-              const Color(0xFF00D4AA),
+              icon: Icons.school_rounded,
+              label: user.isAlumni ? 'Mentees' : 'Mentors',
+              value: '12', // TODO: Fetch real count of connected mentors/mentees
+              color: const Color(0xFF6C63FF),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: _buildStatCard(
               isDark,
-              Icons.people_rounded,
-              'Mentors',
-              '${profile['mentorsConnected']}',
-              const Color(0xFF6C63FF),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildStatCard(
-              isDark,
-              Icons.event_rounded,
-              'Events',
-              '${profile['eventsAttended']}',
-              const Color(0xFFFF6B9D),
+              icon: Icons.videocam_rounded,
+              label: 'Sessions',
+              value: '${user.totalSessions}',
+              color: Colors.amber,
             ),
           ),
         ],
@@ -441,195 +635,127 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatCard(bool isDark, IconData icon, String label, String value, Color color) {
+  Widget _buildStatCard(
+    bool isDark, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+        ),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 32),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54),
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.white70 : Colors.black54,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSkillsSection(bool isDark, Map<String, dynamic> profile) {
-    final skills = profile['skills'] as List<String>;
-
+  Widget _buildSectionWithChips({
+    required BuildContext context,
+    required String title,
+    required List<String> tags,
+    required bool isDark,
+    required VoidCallback onEdit,
+    Color accentColor = const Color(0xFF6C63FF),
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Skills', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              TextButton(
-                onPressed: () {
-                  // TODO: Edit skills
-                },
-                child: const Text(
-                  'Edit',
-                  style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.w600),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                 ),
+              ),
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                color: accentColor,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: skills.map((skill) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  skill,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuSection(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          _buildMenuItem(isDark, Icons.person_rounded, 'Edit Profile', () {}),
-          _buildMenuItem(isDark, Icons.lock_rounded, 'Privacy & Security', () {}),
-          _buildSwitchMenuItem(
-            isDark,
-            Icons.notifications_rounded,
-            'Notifications',
-            _notificationsEnabled,
-            (v) => setState(() => _notificationsEnabled = v),
-          ),
-          _buildSwitchMenuItem(
-            isDark,
-            Icons.dark_mode_rounded,
-            'Dark Mode',
-            _darkModeEnabled,
-            (v) => setState(() => _darkModeEnabled = v),
-          ),
-          _buildMenuItem(isDark, Icons.help_rounded, 'Help & Support', () {}),
-          _buildMenuItem(isDark, Icons.info_rounded, 'About', () {}),
-          const SizedBox(height: 16),
-          _buildMenuItem(
-            isDark,
-            Icons.logout_rounded,
-            'Logout',
-            _handleLogout,
-            isDestructive: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(
-    bool isDark,
-    IconData icon,
-    String title,
-    VoidCallback onTap, {
-    bool isDestructive = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isDestructive ? const Color(0xFFFF6B9D) : const Color(0xFF6C63FF),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: isDestructive
-                      ? const Color(0xFFFF6B9D)
-                      : (isDark ? Colors.white : Colors.black87),
-                ),
+          if (tags.isEmpty)
+             Text(
+               "No $title added yet.",
+                style: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+             )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.start,
+                alignment: WrapAlignment.start,
+                children: tags.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                      borderRadius: BorderRadius.circular(24), // Curved chips
+                      border: Border.all(
+                        color: isDark ? Colors.white12 : Colors.black12,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      tag,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: isDark ? Colors.white54 : Colors.black38,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSwitchMenuItem(
-    bool isDark,
-    IconData icon,
-    String title,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF6C63FF)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : Colors.black87,
-              ),
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: const Color(0xFF6C63FF),
-          ),
         ],
       ),
     );
