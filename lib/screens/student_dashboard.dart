@@ -12,6 +12,7 @@ import 'career_path_screen.dart';
 import 'ai_chat_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
+import 'community/community_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -773,11 +774,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     return GestureDetector(
       onTap: () {
         if (isExplore) {
-          if (isVerified) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const MentorMatchingScreen()));
-          } else {
-            _showVerificationRequired();
-          }
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityScreen()));
         } else if (isEvents) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
         } else {
