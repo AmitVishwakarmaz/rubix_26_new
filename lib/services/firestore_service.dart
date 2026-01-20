@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../models/new_models.dart';
 
 /// Service for Firestore database operations
 class FirestoreService {
@@ -8,6 +9,12 @@ class FirestoreService {
   /// Get users collection reference
   CollectionReference<Map<String, dynamic>> get _usersCollection =>
       _firestore.collection('users');
+  
+  CollectionReference<Map<String, dynamic>> get _jobsCollection =>
+      _firestore.collection('jobs');
+
+  CollectionReference<Map<String, dynamic>> get _requestsCollection =>
+      _firestore.collection('mentorship_requests');
 
   /// Check if user document exists
   Future<bool> userExists(String userId) async {
@@ -20,6 +27,14 @@ class FirestoreService {
     final doc = await _usersCollection.doc(userId).get();
     if (!doc.exists || doc.data() == null) return null;
     return AppUser.fromMap(doc.data()!, doc.id);
+  }
+
+  /// Stream user by ID
+  Stream<AppUser?> streamUser(String userId) {
+    return _usersCollection.doc(userId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return null;
+      return AppUser.fromMap(doc.data()!, doc.id);
+    });
   }
 
   /// Create new user document
@@ -103,5 +118,90 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs
             .map((doc) => AppUser.fromMap(doc.data(), doc.id))
             .toList());
+  }
+
+  // --- JOB POSTS ---
+
+  Future<void> createJobPost(JobPost job) async {
+    await _jobsCollection.add(job.toMap());
+  }
+
+  Stream<List<JobPost>> getJobPosts() {
+    return _jobsCollection
+        .orderBy('postedDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => JobPost.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  // --- MENTORSHIP REQUESTS ---
+
+  Future<void> sendMentorshipRequest(MentorshipRequest request) async {
+    await _requestsCollection.add(request.toMap());
+  }
+
+  Stream<List<MentorshipRequest>> getMentorshipRequestsForAlumni(String alumniId) {
+    return _requestsCollection
+        .where('alumniId', isEqualTo: alumniId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+  
+  Stream<List<MentorshipRequest>> getMyMentees(String alumniId) {
+    return _requestsCollection
+        .where('alumniId', isEqualTo: alumniId)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MentorshipRequest.fromMap(doc.data(), doc.id))
+            .toList());
+    // Note: To get full user details, we'd need to fetch user docs for each request.
+    // For now, we'll rely on the name stored in the request or fetch individually in UI.
+  }
+
+  Future<void> updateRequestStatus(String requestId, String status) async {
+    await _requestsCollection.doc(requestId).update({'status': status});
+  }
+
+  // --- ALUMNI FETCHING ---
+
+  Future<List<AppUser>> getAlumni() async {
+    final querySnapshot = await _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        //.where('verificationStatus', isEqualTo: 'verified') // Uncomment in prod
+        .get();
+    
+    return querySnapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+  
+  Stream<List<AppUser>> streamAlumni() {
+     return _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  // --- SAVED ALUMNI ---
+  
+  Future<void> toggleSavedAlumni(String userId, String alumniId) async {
+    final savedRef = _usersCollection.doc(userId).collection('saved_alumni').doc(alumniId);
+    final doc = await savedRef.get();
+    if (doc.exists) {
+      await savedRef.delete();
+    } else {
+      await savedRef.set({'timestamp': FieldValue.serverTimestamp()});
+    }
+  }
+
+  Future<bool> isAlumniSaved(String userId, String alumniId) async {
+    final doc = await _usersCollection.doc(userId).collection('saved_alumni').doc(alumniId).get();
+    return doc.exists;
   }
 }

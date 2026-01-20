@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import '../models/user_model.dart';
+import '../models/new_models.dart';
+import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
 import 'session_booking_screen.dart';
 
 class MentorDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> mentor;
+  final AppUser mentor;
   
   const MentorDetailScreen({Key? key, required this.mentor}) : super(key: key);
 
@@ -14,11 +19,122 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isSaved = false;
+  bool _isLoading = false;
+  final FirestoreService _firestoreService = FirestoreService();
+  final AuthService _authService = AuthService();
+  String? _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _checkIfSaved();
+  }
+  
+  Future<void> _checkIfSaved() async {
+    final user = _authService.currentUser;
+    if (user != null) {
+      _currentUserId = user.uid;
+      final saved = await _firestoreService.isAlumniSaved(user.uid, widget.mentor.userId);
+      if (mounted) {
+        setState(() {
+          _isSaved = saved;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleSave() async {
+    if (_currentUserId == null) return;
+    
+    setState(() => _isLoading = true);
+    await _firestoreService.toggleSavedAlumni(_currentUserId!, widget.mentor.userId);
+    
+    if (mounted) {
+      setState(() {
+        _isSaved = !_isSaved;
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_isSaved ? 'Alumni saved to bookmarks' : 'Alumni removed from bookmarks')),
+      );
+    }
+  }
+
+  Future<void> _handleConnect() async {
+    if (_currentUserId == null) return;
+
+    final messageController = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Connect with Alumni'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Send a mentorship request to this alumni.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              decoration: const InputDecoration(
+                hintText: 'Write a brief message...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (messageController.text.trim().isEmpty) return;
+              Navigator.pop(context);
+              _sendRequest(messageController.text.trim());
+            },
+            child: const Text('Send Request'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendRequest(String message) async {
+    try {
+      if (_currentUserId == null) return;
+      
+      // Fetch current user name for the request
+      final currentUser = await _firestoreService.getUser(_currentUserId!);
+      
+      final request = MentorshipRequest(
+        id: Uuid().v4(),
+        studentId: _currentUserId!,
+        alumniId: widget.mentor.userId,
+        studentName: currentUser?.name ?? 'Student',
+        alumniName: widget.mentor.name,
+        date: DateTime.now(),
+        status: 'pending',
+        message: message,
+      );
+
+      await _firestoreService.sendMentorshipRequest(request);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mentorship request sent successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending request: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -91,7 +207,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
             const Spacer(),
             
             IconButton(
-              onPressed: () {},
+              onPressed: () {}, // Share logic specific to platform, skipped for now
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -103,9 +219,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
             ),
             
             IconButton(
-              onPressed: () {
-                setState(() => _isSaved = !_isSaved);
-              },
+              onPressed: _toggleSave,
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -140,8 +254,8 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFF6C63FF + (widget.mentor['name'].hashCode % 1000)),
-                      Color(0xFF4E9FFF + (widget.mentor['name'].hashCode % 1000)),
+                      Color(0xFF6C63FF + (widget.mentor.name.hashCode % 1000)),
+                      Color(0xFF4E9FFF + (widget.mentor.name.hashCode % 1000)),
                     ],
                   ),
                   boxShadow: [
@@ -154,7 +268,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                 ),
                 child: Center(
                   child: Text(
-                    widget.mentor['name'][0],
+                    widget.mentor.name.isNotEmpty ? widget.mentor.name[0].toUpperCase() : '?',
                     style: const TextStyle(
                       fontSize: 56,
                       fontWeight: FontWeight.bold,
@@ -165,7 +279,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               ),
               
               // Verified Badge
-              if (widget.mentor['verified'] ?? false)
+              if (widget.mentor.isVerified)
                 Positioned(
                   bottom: 5,
                   right: 5,
@@ -187,7 +301,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                   ),
                 ),
               
-              // Match Score
+              // Match Score (Mocked for now as it's computed logic)
               Positioned(
                 top: -10,
                 right: -10,
@@ -215,7 +329,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${widget.mentor['matchScore']}%',
+                        '95%', // Mock score
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -233,7 +347,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           
           // Name & Title
           Text(
-            widget.mentor['name'],
+            widget.mentor.name,
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -243,7 +357,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           const SizedBox(height: 8),
           
           Text(
-            widget.mentor['role'],
+            widget.mentor.jobRole ?? 'Alumni Role',
             style: TextStyle(
               fontSize: 16,
               color: isDark ? Colors.white70 : Colors.black54,
@@ -261,7 +375,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              widget.mentor['company'],
+              widget.mentor.currentCompany ?? 'Company',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -276,14 +390,14 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildQuickStat(Icons.work_rounded, widget.mentor['experience']),
+              _buildQuickStat(Icons.work_rounded, '5 years'), // Mock experience
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 width: 1,
                 height: 30,
                 color: isDark ? Colors.white24 : Colors.black12,
               ),
-              _buildQuickStat(Icons.access_time_rounded, widget.mentor['responseTime']),
+              _buildQuickStat(Icons.access_time_rounded, '< 24 hrs'), // Mock response time
             ],
           ),
         ],
@@ -317,7 +431,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.star_rounded,
               label: 'Rating',
-              value: '${widget.mentor['rating']}',
+              value: '5.0', // Mock
               color: Colors.amber,
             ),
           ),
@@ -328,7 +442,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.groups_rounded,
               label: 'Mentees',
-              value: '${widget.mentor['mentees']}',
+              value: '12', // Mock
               color: const Color(0xFF6C63FF),
             ),
           ),
@@ -339,7 +453,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.videocam_rounded,
               label: 'Sessions',
-              value: '${widget.mentor['sessions']}',
+              value: '24', // Mock
               color: const Color(0xFF00D4AA),
             ),
           ),
@@ -435,7 +549,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           const SizedBox(height: 12),
           
           Text(
-            'Passionate ${widget.mentor['role']} at ${widget.mentor['company']} with ${widget.mentor['experience']} of experience. I love helping students navigate their career paths and achieve their goals. My expertise spans across multiple domains, and I\'m always excited to share my knowledge and learn from mentees as well.',
+            'Passionate ${widget.mentor.jobRole} at ${widget.mentor.currentCompany}. I love helping students navigate their career paths and achieve their goals. My expertise spans across multiple domains, and I\'m always excited to share my knowledge and learn from mentees as well.',
             style: TextStyle(
               fontSize: 15,
               height: 1.6,
@@ -443,47 +557,47 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
             ),
           ),
           
-          const SizedBox(height: 32),
-          
-          const Text(
-            'Expertise',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: (widget.mentor['skills'] as List).map((skill) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
+          if (widget.mentor.skills != null && widget.mentor.skills!.isNotEmpty) ...[
+            const SizedBox(height: 32),
+            const Text(
+              'Expertise',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: widget.mentor.skills!.map((skill) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6C63FF).withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
                     ),
-                  ],
-                ),
-                child: Text(
-                  skill,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6C63FF).withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
-                ),
-              );
-            }).toList(),
-          ),
+                  child: Text(
+                    skill,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
           
           const SizedBox(height: 32),
           
@@ -503,9 +617,8 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
 
   Widget _buildCareerTimeline(bool isDark) {
     final positions = [
-      {'year': '2024 - Present', 'title': widget.mentor['role'], 'company': widget.mentor['company']},
-      {'year': '2021 - 2024', 'title': 'Software Engineer', 'company': 'Tech Startup'},
-      {'year': '2018 - 2021', 'title': 'Junior Developer', 'company': 'Software Company'},
+      {'year': 'Present', 'title': widget.mentor.jobRole ?? 'Role', 'company': widget.mentor.currentCompany ?? 'Company'},
+      {'year': 'Past', 'title': 'Software Engineer', 'company': 'Tech Startup'}, // Mock past
     ];
     
     return Column(
@@ -599,7 +712,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   Widget _buildReviewsTab(bool isDark) {
     return ListView.builder(
       padding: const EdgeInsets.all(24),
-      itemCount: 5,
+      itemCount: 3, // Mock count
       itemBuilder: (context, index) {
         return _buildReviewCard(isDark, index);
       },
@@ -607,24 +720,25 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildReviewCard(bool isDark, int index) {
+    // Mock reviews
     final reviews = [
       {
         'name': 'Alex Kumar',
         'rating': 5.0,
         'date': '2 weeks ago',
-        'review': 'Amazing mentor! Really helped me prepare for my interviews and gave valuable insights about the industry.',
+        'review': 'Amazing alumni! Really helped me prepare for my interviews.',
       },
       {
         'name': 'Emily Watson',
         'rating': 5.0,
         'date': '1 month ago',
-        'review': 'Very knowledgeable and patient. The resume review session was incredibly helpful.',
+        'review': 'Very knowledgeable and patient.',
       },
       {
         'name': 'Rahul Sharma',
         'rating': 4.5,
         'date': '2 months ago',
-        'review': 'Great experience! Learned a lot about career growth strategies.',
+        'review': 'Great experience!',
       },
     ];
     
@@ -741,10 +855,10 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               children: [
                 const Icon(Icons.info_outline_rounded, color: Colors.white),
                 const SizedBox(width: 12),
-                Expanded(
+                const Expanded(
                   child: Text(
-                    'Availability status: ${widget.mentor['availability']}',
-                    style: const TextStyle(
+                    'Availability status: High', // Mock
+                    style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
@@ -834,16 +948,9 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
             Expanded(
               flex: 2,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => SessionBookingScreen(mentor: widget.mentor),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.calendar_today_rounded),
-                label: const Text('Book Session'),
+                onPressed: _handleConnect,
+                icon: const Icon(Icons.person_add_rounded),
+                label: const Text('Connect'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: const Color(0xFF6C63FF),

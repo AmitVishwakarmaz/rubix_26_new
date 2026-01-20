@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 
 class AIChatScreen extends StatefulWidget {
   const AIChatScreen({Key? key}) : super(key: key);
@@ -13,25 +15,60 @@ class _AIChatScreenState extends State<AIChatScreen>
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
+  
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
+  String? _userRole;
 
-  final List<String> _quickQuestions = [
-    'How do I prepare for interviews?',
-    'What skills should I learn?',
-    'Career path for CS major?',
-    'Best companies for internships?',
-  ];
+  List<String> _quickQuestions = [];
 
   @override
   void initState() {
     super.initState();
+    _initializeChat();
+  }
+
+  Future<void> _initializeChat() async {
+    final user = _authService.currentUser;
+    if (user != null) {
+      _userRole = await _firestoreService.getUserRole(user.uid);
+    }
+    _setupQuickQuestions();
     _addWelcomeMessage();
+  }
+  
+  void _setupQuickQuestions() {
+    if (_userRole == 'alumni') {
+      _quickQuestions = [
+        'How can I help a student?',
+        'Draft a job post for me',
+        'Suggest mentorship topics',
+        'Tips for first-time mentors',
+      ];
+    } else {
+      _quickQuestions = [
+        'How do I prepare for interviews?',
+        'What skills should I learn?',
+        'Career path for CS major?',
+        'Best companies for internships?',
+      ];
+    }
+    if (mounted) setState(() {});
   }
 
   void _addWelcomeMessage() {
     Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
       setState(() {
+        String welcomeText;
+        if (_userRole == 'alumni') {
+          welcomeText = 'Hi! I\'m your Alumni Assistant 👋\n\nI can help you with:\n• Finding mentees\n• Drafting job descriptions\n• Mentorship guides\n• Scheduling sessions\n\nHow can I support your mentorship journey today?';
+        } else {
+          welcomeText = 'Hi! I\'m your AI Career Assistant 👋\n\nI can help you with:\n• Career guidance\n• Interview preparation\n• Skill development\n• Mentor recommendations\n\nHow can I assist you today?';
+        }
+        
         _messages.add(ChatMessage(
-          text: 'Hi! I\'m your AI Career Assistant 👋\n\nI can help you with:\n• Career guidance\n• Interview preparation\n• Skill development\n• Mentor recommendations\n\nHow can I assist you today?',
+          text: welcomeText,
           isUser: false,
           timestamp: DateTime.now(),
         ));
@@ -63,6 +100,7 @@ class _AIChatScreenState extends State<AIChatScreen>
 
     // Simulate AI response
     Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
       setState(() {
         _messages.add(ChatMessage(
           text: _generateAIResponse(text),
@@ -78,16 +116,29 @@ class _AIChatScreenState extends State<AIChatScreen>
   String _generateAIResponse(String userMessage) {
     final lower = userMessage.toLowerCase();
     
-    if (lower.contains('interview')) {
-      return 'Great question about interviews! Here are my top tips:\n\n1. **Practice Common Questions**: Use resources from our library\n2. **Mock Interviews**: Book sessions with mentors\n3. **Research the Company**: Check our company guides\n4. **STAR Method**: Structure your answers properly\n\nWould you like me to connect you with mentors who can help with interview prep?';
-    } else if (lower.contains('skill')) {
-      return 'Skill development is crucial! Based on your profile, I recommend:\n\n• **Technical Skills**: Focus on your major-specific tools\n• **Soft Skills**: Communication & Leadership\n• **Industry Tools**: Check trending technologies\n\nI can recommend specific courses and mentors. Interested?';
-    } else if (lower.contains('career') || lower.contains('path')) {
-      return 'Let me help you explore career paths! I noticed you\'re studying Computer Science.\n\nPopular paths include:\n• Software Engineering\n• Data Science\n• Product Management\n• DevOps\n\nCheck out our Career Path Visualizer for detailed roadmaps!';
-    } else if (lower.contains('mentor')) {
-      return 'I found 15 mentors that match your profile!\n\nTop recommendations:\n• Sarah Johnson - Google (95% match)\n• Michael Chen - Microsoft (92% match)\n• Priya Patel - Meta (88% match)\n\nWould you like to see their full profiles?';
+    if (_userRole == 'alumni') {
+       if (lower.contains('help') || lower.contains('student')) {
+         return 'To help students effectively, consider:\n\n1. Updating your profile with current skills\n2. Posting open office hours\n3. Browsing mentorship requests\n4. Offering mock interviews\n\nWould you like to see pending requests?';
+       } else if (lower.contains('job') || lower.contains('post')) {
+         return 'I can help you structure a job post. Key elements to include:\n\n• Role Title & Department\n• Key Responsibilities\n• Required Skills (Technical & Soft)\n• Company Culture highlights\n\nShall I open the "Post Job" form for you?';
+       } else if (lower.contains('topic') || lower.contains('guide')) {
+          return 'Great mentorship topics include:\n\n• Code reviews & best practices\n• System design basics\n• Soft skills in the workplace\n• Resume & LinkedIn reviews\n• Mock interviews\n\nPick one to start a session!';
+       } else {
+         return 'I can assist you with your alumni activities. Try asking about:\n\n• Managing mentees\n• Posting jobs\n• Mentorship best practices';
+       }
     } else {
-      return 'I understand you\'re asking about "${userMessage}". \n\nHere\'s what I can do:\n• Find you relevant mentors\n• Suggest learning resources\n• Show career paths\n• Connect you with alumni\n\nCould you provide more specific details about what you\'re looking for?';
+      // Student Logic
+      if (lower.contains('interview')) {
+        return 'Great question about interviews! Here are my top tips:\n\n1. **Practice Common Questions**: Use resources from our library\n2. **Mock Interviews**: Book sessions with alumni\n3. **Research the Company**: Check our company guides\n4. **STAR Method**: Structure your answers properly\n\nWould you like me to connect you with alumni who can help with interview prep?';
+      } else if (lower.contains('skill')) {
+        return 'Skill development is crucial! Based on your profile, I recommend:\n\n• **Technical Skills**: Focus on your major-specific tools\n• **Soft Skills**: Communication & Leadership\n• **Industry Tools**: Check trending technologies\n\nI can recommend specific courses and mentors. Interested?';
+      } else if (lower.contains('career') || lower.contains('path')) {
+        return 'Let me help you explore career paths! I noticed you\'re studying Computer Science.\n\nPopular paths include:\n• Software Engineering\n• Data Science\n• Product Management\n• DevOps\n\nCheck out our Career Path Visualizer for detailed roadmaps!';
+      } else if (lower.contains('mentor') || lower.contains('alumni')) {
+        return 'I found 15 alumni that match your profile!\n\nTop recommendations:\n• Sarah Johnson - Google (95% match)\n• Michael Chen - Microsoft (92% match)\n• Priya Patel - Meta (88% match)\n\nWould you like to see their full profiles?';
+      } else {
+        return 'I understand you\'re asking about "${userMessage}". \n\nHere\'s what I can do:\n• Find you relevant alumni\n• Suggest learning resources\n• Show career paths\n• Connect you with mentors\n\nCould you provide more specific details about what you\'re looking for?';
+      }
     }
   }
 
@@ -177,11 +228,11 @@ class _AIChatScreenState extends State<AIChatScreen>
           ),
           const SizedBox(width: 12),
           
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'AI Assistant',
                   style: TextStyle(
                     fontSize: 18,
@@ -190,15 +241,15 @@ class _AIChatScreenState extends State<AIChatScreen>
                 ),
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.circle,
                       size: 8,
                       color: Color(0xFF00D4AA),
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Text(
                       'Online',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Color(0xFF00D4AA),
                         fontWeight: FontWeight.w600,
@@ -305,6 +356,8 @@ class _AIChatScreenState extends State<AIChatScreen>
   }
 
   Widget _buildQuickQuestions(bool isDark) {
+    if (_quickQuestions.isEmpty) return const SizedBox();
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Column(

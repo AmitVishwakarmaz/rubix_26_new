@@ -29,6 +29,12 @@ class AppUser {
   final String? industry;
   final String? linkedinUrl;
   final List<String>? mentorshipInterests;
+  
+  // Gamification & Stats
+  final int xp;
+  final int totalSessions;
+
+  final String? profileImageUrl;
 
   AppUser({
     required this.userId,
@@ -37,6 +43,9 @@ class AppUser {
     required this.role,
     this.verificationStatus = VerificationStatus.pending,
     this.profileCompleted = false,
+    this.xp = 0,
+    this.totalSessions = 0,
+    this.profileImageUrl,
     // Student fields
     this.university,
     this.degree,
@@ -62,6 +71,9 @@ class AppUser {
       role: map['role'] ?? 'student',
       verificationStatus: _parseVerificationStatus(map['verificationStatus']),
       profileCompleted: map['profileCompleted'] ?? false,
+      xp: map['xp'] ?? 0,
+      totalSessions: map['totalSessions'] ?? 0,
+      profileImageUrl: map['profileImageUrl'],
       // Student fields
       university: map['university'],
       degree: map['degree'],
@@ -98,6 +110,9 @@ class AppUser {
       'role': role,
       'verificationStatus': verificationStatus.name,
       'profileCompleted': profileCompleted,
+      'xp': xp,
+      'totalSessions': totalSessions,
+      if (profileImageUrl != null) 'profileImageUrl': profileImageUrl,
       // Student fields
       if (university != null) 'university': university,
       if (degree != null) 'degree': degree,
@@ -121,6 +136,15 @@ class AppUser {
   bool get isVerified => verificationStatus == VerificationStatus.verified;
   bool get isPending => verificationStatus == VerificationStatus.pending;
   bool get isRejected => verificationStatus == VerificationStatus.rejected;
+  
+  // Gamification Ranks
+  String get rank {
+    if (xp < 100) return 'Novice';
+    if (xp < 300) return 'Pupil';
+    if (xp < 600) return 'Specialist';
+    if (xp < 1000) return 'Expert';
+    return 'Grandmaster';
+  }
 
   /// Create a copy with updated fields
   AppUser copyWith({
@@ -129,6 +153,9 @@ class AppUser {
     String? role,
     VerificationStatus? verificationStatus,
     bool? profileCompleted,
+    int? xp,
+    int? totalSessions,
+    String? profileImageUrl,
     String? university,
     String? degree,
     String? major,
@@ -149,6 +176,9 @@ class AppUser {
       role: role ?? this.role,
       verificationStatus: verificationStatus ?? this.verificationStatus,
       profileCompleted: profileCompleted ?? this.profileCompleted,
+      xp: xp ?? this.xp,
+      totalSessions: totalSessions ?? this.totalSessions,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       university: university ?? this.university,
       degree: degree ?? this.degree,
       major: major ?? this.major,

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-// Assuming these screens exist or will be created
-//import 'mentee_requests_screen.dart'; 
+import 'alumni/mentorship_requests_screen.dart'; 
 import 'resources_screen.dart';
 import 'events_screen.dart';
 import 'profile_screen.dart';
-//import 'job_posting_screen.dart';
+import 'alumni/post_job_screen.dart';
+import 'alumni/my_mentees_screen.dart';
 import 'ai_chat_screen.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+import '../models/user_model.dart';
+import '../models/new_models.dart';
 
 class AlumniDashboard extends StatefulWidget {
   const AlumniDashboard({Key? key}) : super(key: key);
@@ -16,13 +20,32 @@ class AlumniDashboard extends StatefulWidget {
 
 class _AlumniDashboardState extends State<AlumniDashboard> {
   int _selectedIndex = 0;
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = _authService.currentUser;
+
+    final List<Widget> _screens = [
+      _buildHomeContent(isDark, user?.uid),
+      const ProfileScreen(),
+    ];
     
     return Scaffold(
-      body: Container(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: _buildBottomNavBar(isDark),
+    );
+  }
+
+  Widget _buildHomeContent(bool isDark, String? userId) {
+    return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -35,11 +58,12 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
         child: SafeArea(
           child: CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(child: _buildHeader(isDark)),
-              SliverToBoxAdapter(child: _buildStatsSection(isDark)),
+              SliverToBoxAdapter(child: _buildHeader(isDark, userId)),
+              SliverToBoxAdapter(child: _buildStatsSection(isDark, userId)),
               SliverToBoxAdapter(child: _buildSectionTitle('Pending Requests', 'View All', isDark, () {
-                // Navigate to requests
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen()));
               })),
+              SliverToBoxAdapter(child: _buildPendingRequestsPreview(isDark, userId)),
               SliverToBoxAdapter(child: _buildQuickActions(isDark)),
               SliverToBoxAdapter(child: _buildSectionTitle('Alumni Tools', '', isDark, null)),
               SliverToBoxAdapter(child: _buildFeatureGrid(isDark)),
@@ -47,14 +71,10 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
             ],
           ),
         ),
-      ),
-      floatingActionButton: _buildFloatingActionButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _buildBottomNavBar(isDark),
-    );
+      );
   }
 
-  Widget _buildHeader(bool isDark) {
+  Widget _buildHeader(bool isDark, String? userId) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -63,16 +83,23 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           Row(
             children: [
               GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
-                    border: Border.all(color: Colors.white, width: 3),
-                  ),
-                  child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28),
+                onTap: () => setState(() => _selectedIndex = 1),
+                child: FutureBuilder<AppUser?>(
+                  future: userId != null ? _firestoreService.getUser(userId) : null,
+                  builder: (context, snapshot) {
+                     final imageUrl = snapshot.data?.profileImageUrl;
+                     return Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
+                        border: Border.all(color: Colors.white, width: 3),
+                         image: imageUrl != null ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover) : null,
+                      ),
+                      child: imageUrl == null ? const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 28) : null,
+                    );
+                  }
                 ),
               ),
               const SizedBox(width: 16),
@@ -80,9 +107,17 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Welcome back, Mentor', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
+                    Text('Welcome back, Alumni', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54)),
                     const SizedBox(height: 4),
-                    const Text('Dr. Ananya Iyer', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    FutureBuilder<AppUser?>(
+                      future: userId != null ? _firestoreService.getUser(userId) : null,
+                      builder: (context, snapshot) {
+                        return Text(
+                          snapshot.data?.name ?? 'Loading...',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                        );
+                      }
+                    ),
                   ],
                 ),
               ),
@@ -96,52 +131,141 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     );
   }
 
-  Widget _buildStatsSection(bool isDark) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          Expanded(child: _buildStatCard(isDark, icon: Icons.school_rounded, label: 'Mentees', value: '4', gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]))),
-          const SizedBox(width: 16),
-          Expanded(child: _buildStatCard(isDark, icon: Icons.video_camera_front_rounded, label: 'Hours', value: '42', gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]))),
-          const SizedBox(width: 16),
-          Expanded(child: _buildStatCard(isDark, icon: Icons.star_rounded, label: 'Rating', value: '4.9', gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]))),
-        ],
-      ),
+  Widget _buildStatsSection(bool isDark, [String? userId]) {
+    // Note: userId passed optionally to match signature, but we need it for stream.
+    // If not passed, we can't stream.
+    if (userId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<AppUser?>(
+      stream: _firestoreService.streamUser(userId),
+      builder: (context, userSnapshot) {
+        final user = userSnapshot.data;
+        // Fetch Mentees count? Not yet implemented in AppUser, but we can stream requests count.
+        // For now, let's just stick to gamification fields.
+        final hours = '42'; // Placeholder
+        final rating = '4.9'; // Placeholder
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              Expanded(child: StreamBuilder<List<MentorshipRequest>>(
+                stream: _firestoreService.getMyMentees(userId),
+                builder: (context, snapshot) {
+                  final uniqueMentees = snapshot.data?.length ?? 0;
+                   return _buildStatCard(isDark, icon: Icons.school_rounded, label: 'Mentees', value: '$uniqueMentees', gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]));
+                }
+              )),
+              const SizedBox(width: 16),
+              Expanded(child: _buildStatCard(isDark, icon: Icons.video_camera_front_rounded, label: 'Sessions', value: '${user?.totalSessions ?? 0}', gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]))), // Changed to Sessions to match Student
+              const SizedBox(width: 16),
+              Expanded(child: _buildStatCard(isDark, icon: Icons.emoji_events_rounded, label: 'Level', value: '${(user?.xp ?? 0) ~/ 100 + 1}', gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]))),
+            ],
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildPendingRequestsPreview(bool isDark, String? userId) {
+    if (userId == null) return const SizedBox();
+    
+    return StreamBuilder<List<MentorshipRequest>>(
+      stream: _firestoreService.getMentorshipRequestsForAlumni(userId),
+      builder: (context, snapshot) {
+        final requests = snapshot.data?.where((r) => r.status == 'pending').toList() ?? [];
+        
+        if (requests.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Card(
+               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+               elevation: 0,
+               color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+               child: const Padding(
+                 padding: EdgeInsets.all(16.0),
+                 child: Text("No pending mentorship requests."),
+               ),
+            ),
+          );
+        }
+
+        // Show recently added request, or just a summary
+        final latest = requests.first;
+        return Padding(
+             padding: const EdgeInsets.symmetric(horizontal: 24),
+             child: GestureDetector(
+               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen())),
+               child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: const Color(0xFF6C63FF),
+                      child: Text(latest.studentName[0], style: const TextStyle(color: Colors.white)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${latest.studentName} sent a request', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(latest.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                  ],
+                ),
+               ),
+             ),
+        );
+      }
     );
   }
 
   Widget _buildQuickActions(bool isDark) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: const Color(0xFF00D4AA).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-              child: const Icon(Icons.handshake_rounded, color: Colors.white, size: 32),
-            ),
-            const SizedBox(width: 16),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('New Mentorship Request', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-                  SizedBox(height: 4),
-                  Text('Review student profile', style: TextStyle(fontSize: 14, color: Colors.white70)),
-                ],
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: GestureDetector(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MentorshipRequestsScreen())),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: const Color(0xFF00D4AA).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                child: const Icon(Icons.handshake_rounded, color: Colors.white, size: 32),
               ),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
-          ],
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('View All Requests', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                    SizedBox(height: 4),
+                    Text('Review student profiles', style: TextStyle(fontSize: 14, color: Colors.white70)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -149,8 +273,8 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
 
   Widget _buildFeatureGrid(bool isDark) {
     final features = [
-      {'icon': Icons.campaign_rounded, 'title': 'Post a Job', 'color': const Color(0xFF6C63FF), 'screen': const ()},
-      {'icon': Icons.groups_rounded, 'title': 'My Mentees', 'color': const Color(0xFFFF6B9D), 'screen': const ()},
+      {'icon': Icons.campaign_rounded, 'title': 'Post a Job', 'color': const Color(0xFF6C63FF), 'screen': const PostJobScreen()},
+      {'icon': Icons.groups_rounded, 'title': 'My Mentees', 'color': const Color(0xFFFF6B9D), 'screen': const MyMenteesScreen()},
       {'icon': Icons.event_available_rounded, 'title': 'Manage Events', 'color': const Color(0xFFFFA726), 'screen': const EventsScreen()},
       {'icon': Icons.auto_stories_rounded, 'title': 'Knowledge Base', 'color': const Color(0xFF00D4AA), 'screen': const ResourcesScreen()},
     ];
@@ -306,10 +430,8 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildNavItem(0, Icons.dashboard_rounded, 'Home', null),
-             // _buildNavItem(1, Icons.people_alt_rounded, 'Mentees',  ()),
               const SizedBox(width: 64),
-              //_buildNavItem(2, Icons.work_rounded, 'Jobs',  ()),
-              _buildNavItem(3, Icons.person_rounded, 'Profile', const ProfileScreen()),
+              _buildNavItem(1, Icons.person_rounded, 'Profile', null),
             ],
           ),
         ),
@@ -322,7 +444,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     return GestureDetector(
       onTap: () {
         setState(() => _selectedIndex = index);
-        if (screen != null) Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+        // if (screen != null) Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
