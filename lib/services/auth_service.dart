@@ -9,7 +9,7 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirestoreService _firestoreService = FirestoreService();
-
+  
   static const String _onboardingSeenKey = 'onboarding_seen';
 
   /// Get current user
@@ -17,23 +17,6 @@ class AuthService {
 
   /// Stream of auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  /// Check if this is the first launch (onboarding not seen)
-  Future<bool> isFirstLaunch() async {
-    final prefs = await SharedPreferences.getInstance();
-    return !(prefs.getBool(_onboardingSeenKey) ?? false);
-  }
-
-  /// Mark onboarding as seen
-  Future<void> setOnboardingSeen() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_onboardingSeenKey, true);
-  }
-
-  /// Check if user profile is complete
-  Future<bool> isProfileComplete(String userId) async {
-    return await _firestoreService.isProfileCompleted(userId);
-  }
 
   /// Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
@@ -107,6 +90,18 @@ class AuthService {
       role: role,
     );
     await _firestoreService.createUser(user);
+  }
+
+  /// Check if this is the first app launch (onboarding not seen)
+  Future<bool> isFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    return !(prefs.getBool(_onboardingSeenKey) ?? false);
+  }
+
+  /// Mark onboarding as seen
+  Future<void> setOnboardingSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingSeenKey, true);
   }
 
   /// Sign out
