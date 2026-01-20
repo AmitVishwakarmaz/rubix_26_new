@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'mentor_detail_screen.dart';
+import '../services/firestore_service.dart';
+import '../models/user_model.dart';
 
 class MentorMatchingScreen extends StatefulWidget {
   const MentorMatchingScreen({Key? key}) : super(key: key);
@@ -16,86 +18,13 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
   String _selectedFilter = 'All';
   String _selectedSort = 'Best Match';
   
+  final FirestoreService _firestoreService = FirestoreService();
+  
   final List<String> _filters = ['All', 'Technology', 'Finance', 'Consulting', 'Healthcare'];
   final List<String> _sortOptions = ['Best Match', 'Experience', 'Availability', 'Rating'];
   
-  final List<Map<String, dynamic>> _mentors = [
-    {
-      'name': 'Sarah Johnson',
-      'role': 'Senior Software Engineer',
-      'company': 'Google',
-      'matchScore': 95,
-      'experience': '8 years',
-      'sessions': 45,
-      'rating': 4.9,
-      'skills': ['Flutter', 'React', 'Python', 'System Design'],
-      'industry': 'Technology',
-      'availability': 'High',
-      'responseTime': '< 2 hours',
-      'mentees': 32,
-      'verified': true,
-    },
-    {
-      'name': 'Michael Chen',
-      'role': 'Product Manager',
-      'company': 'Microsoft',
-      'matchScore': 92,
-      'experience': '6 years',
-      'sessions': 38,
-      'rating': 4.8,
-      'skills': ['Product Strategy', 'User Research', 'Agile', 'Data Analytics'],
-      'industry': 'Technology',
-      'availability': 'Medium',
-      'responseTime': '< 4 hours',
-      'mentees': 28,
-      'verified': true,
-    },
-    {
-      'name': 'Priya Patel',
-      'role': 'Data Scientist',
-      'company': 'Meta',
-      'matchScore': 88,
-      'experience': '7 years',
-      'sessions': 52,
-      'rating': 5.0,
-      'skills': ['Machine Learning', 'Python', 'AI', 'Deep Learning'],
-      'industry': 'Technology',
-      'availability': 'High',
-      'responseTime': '< 1 hour',
-      'mentees': 41,
-      'verified': true,
-    },
-    {
-      'name': 'David Kim',
-      'role': 'Investment Banker',
-      'company': 'Goldman Sachs',
-      'matchScore': 82,
-      'experience': '9 years',
-      'sessions': 29,
-      'rating': 4.7,
-      'skills': ['Finance', 'Investment', 'M&A', 'Valuation'],
-      'industry': 'Finance',
-      'availability': 'Low',
-      'responseTime': '< 12 hours',
-      'mentees': 22,
-      'verified': true,
-    },
-    {
-      'name': 'Emily Rodriguez',
-      'role': 'Management Consultant',
-      'company': 'McKinsey',
-      'matchScore': 85,
-      'experience': '5 years',
-      'sessions': 34,
-      'rating': 4.9,
-      'skills': ['Strategy', 'Business Analysis', 'Leadership', 'Case Studies'],
-      'industry': 'Consulting',
-      'availability': 'Medium',
-      'responseTime': '< 6 hours',
-      'mentees': 26,
-      'verified': true,
-    },
-  ];
+  // We will fetch this dynamically
+  // final List<Map<String, dynamic>> _mentors = [];
 
   @override
   void initState() {
@@ -128,36 +57,15 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
     });
   }
 
-  List<Map<String, dynamic>> get _filteredMentors {
-    var filtered = _mentors.where((mentor) {
-      if (_selectedFilter == 'All') return true;
-      return mentor['industry'] == _selectedFilter;
-    }).toList();
-    
-    filtered.sort((a, b) {
-      switch (_selectedSort) {
-        case 'Experience':
-          return b['sessions'].compareTo(a['sessions']);
-        case 'Availability':
-          return _getAvailabilityScore(b['availability'])
-              .compareTo(_getAvailabilityScore(a['availability']));
-        case 'Rating':
-          return b['rating'].compareTo(a['rating']);
-        default:
-          return b['matchScore'].compareTo(a['matchScore']);
-      }
-    });
-    
-    return filtered;
+  List<AppUser> _filterAlumni(List<AppUser> alumni) {
+    if (_selectedFilter == 'All') return alumni;
+    return alumni.where((user) => user.industry == _selectedFilter).toList();
   }
   
-  int _getAvailabilityScore(String availability) {
-    switch (availability) {
-      case 'High': return 3;
-      case 'Medium': return 2;
-      case 'Low': return 1;
-      default: return 0;
-    }
+  // Helper to map availability to score for sorting
+  int _getAvailabilityScore(String? availability) {
+       // Assuming availability is stored in a way we can parse, or default to 0
+       return 0; // Placeholder until we have this field in AppUser properly populated or inferred
   }
 
   @override
@@ -182,8 +90,27 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
               if (_isMatching) _buildMatchingLoader(),
               if (!_isMatching && !_matchComplete) _buildMatchingPrompt(isDark),
               if (_matchComplete) ...[
-                _buildFiltersRow(isDark),
-                Expanded(child: _buildMentorsList(isDark)),
+                // filters need the list length, so we build them inside StreamBuilder or pass a dummy
+                 Expanded(
+                  child: StreamBuilder<List<AppUser>>(
+                    stream: _firestoreService.streamAllUsers(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      final allAlumni = snapshot.data ?? [];
+                      final filteredAlumni = _filterAlumni(allAlumni);
+
+                      return Column(
+                        children: [
+                           _buildFiltersRow(isDark, filteredAlumni.length),
+                           Expanded(child: _buildMentorsList(isDark, filteredAlumni)),
+                        ],
+                      );
+                    }
+                  ),
+                ),
               ],
             ],
           ),
@@ -207,7 +134,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Find Your Mentor',
+                'Find Your Alumni', // Changed from Mentor
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -260,7 +187,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
               const SizedBox(height: 48),
               
               const Text(
-                'Smart Mentor Matching',
+                'Smart Alumni Matching', // Changed
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -270,7 +197,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
               const SizedBox(height: 16),
               
               Text(
-                'Our AI analyzes your profile, skills, and goals to find the perfect mentors for your career journey',
+                'Our AI analyzes your profile, skills, and goals to find the perfect alumni for your career journey', // Changed
                 style: TextStyle(
                   fontSize: 16,
                   color: isDark ? Colors.white70 : Colors.black54,
@@ -297,7 +224,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                       Icon(Icons.auto_awesome_rounded, color: Colors.white),
                       SizedBox(width: 12),
                       Text(
-                        'Find My Mentors',
+                        'Find My Alumni', // Changed
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -363,14 +290,14 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
     );
   }
 
-  Widget _buildFiltersRow(bool isDark) {
+  Widget _buildFiltersRow(bool isDark, int count) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Found ${_filteredMentors.length} mentors',
+            'Found $count alumni', // Changed
             style: TextStyle(
               fontSize: 14,
               color: isDark ? Colors.white70 : Colors.black54,
@@ -459,23 +386,41 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
     );
   }
 
-  Widget _buildMentorsList(bool isDark) {
+  Widget _buildMentorsList(bool isDark, List<AppUser> alumni) {
+    if (alumni.isEmpty) {
+      return Center(
+        child: Text(
+          "No alumni found.",
+          style: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
+        ),
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-      itemCount: _filteredMentors.length,
+      itemCount: alumni.length,
       itemBuilder: (context, index) {
-        return _buildMentorCard(_filteredMentors[index], isDark);
+        return _buildMentorCard(alumni[index], isDark);
       },
     );
   }
 
-  Widget _buildMentorCard(Map<String, dynamic> mentor, bool isDark) {
+  Widget _buildMentorCard(AppUser user, bool isDark) {
+    // We can use a map for local display logic if we want to mix in mock data easily, 
+    // but we must pass 'user' to the detail screen.
+    
+    // Mock data for card display
+    final matchScore = 95; 
+    final rating = 5.0;
+    final mentees = 12;
+    final sessions = 24;
+    final availability = 'High';
+    
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => MentorDetailScreen(mentor: mentor),
+            builder: (_) => MentorDetailScreen(mentor: user.toMap()),
           ),
         );
       },
@@ -508,8 +453,8 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
                       colors: [
-                        Color(0xFF6C63FF + (mentor['name'].hashCode % 1000)),
-                        Color(0xFF4E9FFF + (mentor['name'].hashCode % 1000)),
+                        Color(0xFF6C63FF + (user.name.hashCode % 1000)),
+                        Color(0xFF4E9FFF + (user.name.hashCode % 1000)),
                       ],
                     ),
                   ),
@@ -517,7 +462,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                     children: [
                       Center(
                         child: Text(
-                          mentor['name'][0],
+                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
@@ -525,7 +470,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                           ),
                         ),
                       ),
-                      if (mentor['verified'])
+                      if (user.verificationStatus == VerificationStatus.verified)
                         Positioned(
                           bottom: 0,
                           right: 0,
@@ -559,7 +504,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                         children: [
                           Expanded(
                             child: Text(
-                              mentor['name'],
+                              user.name,
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -585,7 +530,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '${mentor['matchScore']}%',
+                                  '$matchScore%',
                                   style: const TextStyle(
                                     color: Color(0xFF00D4AA),
                                     fontWeight: FontWeight.bold,
@@ -600,7 +545,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                       const SizedBox(height: 4),
                       
                       Text(
-                        mentor['role'],
+                        user.jobRole ?? 'N/A',
                         style: TextStyle(
                           fontSize: 14,
                           color: isDark ? Colors.white70 : Colors.black54,
@@ -609,7 +554,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                       const SizedBox(height: 2),
                       
                       Text(
-                        mentor['company'],
+                        user.currentCompany ?? 'N/A',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF6C63FF),
@@ -629,19 +574,19 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
               children: [
                 _buildStatBadge(
                   Icons.star_rounded,
-                  '${mentor['rating']}',
+                  '$rating',
                   Colors.amber,
                 ),
                 const SizedBox(width: 12),
                 _buildStatBadge(
                   Icons.groups_rounded,
-                  '${mentor['mentees']}',
+                  '$mentees',
                   const Color(0xFF6C63FF),
                 ),
                 const SizedBox(width: 12),
                 _buildStatBadge(
                   Icons.videocam_rounded,
-                  '${mentor['sessions']}',
+                  '$sessions',
                   const Color(0xFF00D4AA),
                 ),
                 const Spacer(),
@@ -652,15 +597,15 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _getAvailabilityColor(mentor['availability']).withOpacity(0.2),
+                    color: _getAvailabilityColor(availability).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    mentor['availability'],
+                    availability,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: _getAvailabilityColor(mentor['availability']),
+                      color: _getAvailabilityColor(availability),
                     ),
                   ),
                 ),
@@ -670,10 +615,11 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
             const SizedBox(height: 16),
             
             // Skills
+            if (user.skills != null && user.skills!.isNotEmpty)
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: (mentor['skills'] as List).take(4).map((skill) {
+              children: user.skills!.take(4).map((skill) {
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -702,7 +648,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {},
+                    onPressed: () {}, // Save functionality could be here too
                     icon: const Icon(Icons.bookmark_outline_rounded),
                     label: const Text('Save'),
                     style: OutlinedButton.styleFrom(
@@ -725,7 +671,7 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => MentorDetailScreen(mentor: mentor),
+                          builder: (_) => MentorDetailScreen(mentor: user.toMap()),
                         ),
                       );
                     },

@@ -143,4 +143,15 @@ class FirestoreService {
   Future<void> updateRequestStatus(String requestId, String status) async {
     await _firestore.collection('mentorship_requests').doc(requestId).update({'status': status});
   }
+
+  /// Stream all alumni users for mentor matching
+  Stream<List<AppUser>> streamAllUsers() {
+    return _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        .where('verificationStatus', isEqualTo: 'verified')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+            .toList());
+  }
 }

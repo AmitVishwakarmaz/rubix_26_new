@@ -349,99 +349,114 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 
   Widget _buildRecommendedMentorsPreview(bool isDark) {
-    // Static preview of mentors - in a real app this would be a StreamBuilder
-    final mentors = [
-      {'name': 'Sarah Johnson', 'role': 'Software Engineer @ Google', 'match': '95%'},
-      {'name': 'Michael Chen', 'role': 'Product Manager @ Microsoft', 'match': '92%'},
-      {'name': 'Priya Patel', 'role': 'Data Scientist @ Meta', 'match': '88%'},
-    ];
-
     return SizedBox(
       height: 140,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: mentors.length,
-        itemBuilder: (context, index) {
-          final mentor = mentors[index];
-          return GestureDetector(
-            onTap: () {
-              if (isVerified) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MentorMatchingScreen()),
-                );
-              } else {
-                _showVerificationRequired();
-              }
-            },
-            child: Container(
-              width: 200,
-              margin: EdgeInsets.only(right: index < mentors.length - 1 ? 16 : 0),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+      child: StreamBuilder<List<AppUser>>(
+        stream: _firestoreService.streamAllUsers(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final alumni = snapshot.data?.take(5).toList() ?? [];
+
+          if (alumni.isEmpty) {
+            return Center(
+              child: Text(
+                'No mentors available yet',
+                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: const Color(0xFF6C63FF),
-                        radius: 20,
-                        child: Text(
-                          mentor['name']![0],
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00D4AA).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          mentor['match']!,
-                          style: const TextStyle(
-                            color: Color(0xFF00D4AA),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+            );
+          }
+
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            itemCount: alumni.length,
+            itemBuilder: (context, index) {
+              final mentor = alumni[index];
+              final matchScore = 95 - (index * 3); // Simulated match score
+
+              return GestureDetector(
+                onTap: () {
+                  if (isVerified) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MentorMatchingScreen()),
+                    );
+                  } else {
+                    _showVerificationRequired();
+                  }
+                },
+                child: Container(
+                  width: 200,
+                  margin: EdgeInsets.only(right: index < alumni.length - 1 ? 16 : 0),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    mentor['name']!,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: const Color(0xFF6C63FF),
+                            radius: 20,
+                            child: Text(
+                              mentor.name.isNotEmpty ? mentor.name[0].toUpperCase() : '?',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00D4AA).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$matchScore%',
+                              style: const TextStyle(
+                                color: Color(0xFF00D4AA),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        mentor.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${mentor.jobRole ?? 'Alumni'} @ ${mentor.currentCompany ?? 'Company'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    mentor['role']!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white54 : Colors.black54,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       ),
