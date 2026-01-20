@@ -8,6 +8,7 @@ import 'mentor_matching_screen.dart';
 import 'mentor_detail_screen.dart';
 import 'resources_screen.dart';
 import 'student_events_screen.dart';
+import 'connect/student_connect_screen.dart';
 import 'profile_screen.dart';
 import 'career_path_screen.dart';
 import 'ai_chat_screen.dart';
@@ -809,7 +810,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
               _buildNavItem(0, Icons.home_rounded, 'Home'),
               _buildNavItem(0, Icons.explore_rounded, 'Explore', isExplore: true),
               const SizedBox(width: 64),
-              _buildNavItem(0, Icons.event_rounded, 'Events', isEvents: true),
+              _buildNavItem(0, Icons.connect_without_contact, 'Connect', isEvents: true),
               _buildNavItem(1, Icons.person_rounded, 'Profile'),
             ],
           ),
@@ -826,7 +827,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
         if (isExplore) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityScreen()));
         } else if (isEvents) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentEventsScreen()));
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentConnectScreen()));
         } else {
           setState(() => _selectedIndex = index);
         }

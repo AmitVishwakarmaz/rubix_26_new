@@ -16,6 +16,7 @@ import 'alumni/my_mentees_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 import 'community/community_screen.dart';
+import 'connect/alumni_connect_screen.dart';
 
 class AlumniDashboard extends StatefulWidget {
   const AlumniDashboard({super.key});
@@ -735,7 +736,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
               _buildNavItem(0, Icons.dashboard_rounded, 'Home', null),
               _buildNavItem(-1, Icons.explore_rounded, 'Explore', const CommunityScreen()),
               const SizedBox(width: 64),
-              _buildNavItem(-1, Icons.event_rounded, 'Events', const EventsScreen()),
+              _buildNavItem(-1, Icons.connect_without_contact, 'Connect', const AlumniConnectScreen()),
               _buildNavItem(1, Icons.person_rounded, 'Profile', null),
             ],
           ),

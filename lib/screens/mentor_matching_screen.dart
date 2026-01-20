@@ -22,8 +22,6 @@ class _MentorMatchingScreenState extends State<MentorMatchingScreen>
   
   final FirestoreService _firestoreService = FirestoreService();
   
-  final FirestoreService _firestoreService = FirestoreService();
-  
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
   
   List<String> _dynamicFilters = ['All'];
