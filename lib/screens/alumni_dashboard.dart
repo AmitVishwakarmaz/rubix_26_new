@@ -206,29 +206,10 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                   ],
                 ),
               ),
-              _buildNotificationIcon(isDark),
             ],
           ),
           const SizedBox(height: 24),
           _buildSearchBox(isDark),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: () async {
-                  await _authService.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen(role: '',)),
-                    );
-                  }
-                },
-                icon: Icon(Icons.logout_rounded, color: isDark ? Colors.white70 : Colors.black54),
-              ),
-            ],
-          ),
         ],
       ),
     );

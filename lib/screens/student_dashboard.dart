@@ -172,7 +172,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => _userProfile?.role == 'student'
-                          ? const ProfileScreen() // or ProfileScreen()
+                          ? const ProfileScreen()
                           : const ProfileScreen(),
                     ),
                   );
@@ -205,38 +205,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   ],
                 ),
               ),
-              Stack(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.notifications_rounded),
-                      onPressed: () {},
-                    ),
-                  ),
-                  Positioned(
-                    right: 10,
-                    top: 10,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF6B9D),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isDark ? const Color(0xFF0F0F1E) : Colors.white,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -255,24 +223,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 border: InputBorder.none,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: () async {
-                  await _authService.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen(role: '',)),
-                    );
-                  }
-                },
-                icon: Icon(Icons.logout_rounded, color: isDark ? Colors.white70 : Colors.black54),
-              ),
-            ],
           ),
         ],
       ),
@@ -572,7 +522,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Opacity(
               opacity: f['locked'] == true ? 0.55 : 1.0,
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -587,21 +537,25 @@ class _StudentDashboardState extends State<StudentDashboard> {
                         Icon(
                           f['icon'] as IconData,
                           color: f['color'] as Color,
-                          size: 36,
+                          size: 28,
                         ),
                         if (f['locked'] == true)
                           const Icon(
                             Icons.lock,
-                            size: 16,
+                            size: 14,
                             color: Colors.grey,
                           ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      f['title'] as String,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: Text(
+                        f['title'] as String,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -748,7 +702,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.white, size: 26),
+              child: Icon(icon, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -758,23 +712,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       color: Colors.white.withOpacity(0.85),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 18),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 16),
           ],
         ),
       ),

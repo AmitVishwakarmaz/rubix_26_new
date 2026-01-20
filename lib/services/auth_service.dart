@@ -104,6 +104,17 @@ class AuthService {
     await prefs.setBool(_onboardingSeenKey, true);
   }
 
+  /// Send password reset email
+  Future<bool> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      return true;
+    } catch (e) {
+      print('Error sending password reset email: $e');
+      return false;
+    }
+  }
+
   /// Sign out
   Future<void> signOut() async {
     await _googleSignIn.signOut();

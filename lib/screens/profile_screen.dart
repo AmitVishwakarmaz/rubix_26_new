@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'auth_screen.dart';
+import 'auth_screen.dart'; // ← make sure this contains LoginScreen
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -11,24 +13,59 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = false;
-  
-  final Map<String, dynamic> _userProfile = {
-    'name': 'Rahul Sharma',
-    'email': 'rahul.sharma@university.edu',
-    'university': 'MIT',
-    'major': 'Computer Science',
-    'gradYear': '2026',
-    'level': 5,
-    'xp': 2450,
-    'xpToNextLevel': 3000,
-    'sessionsCompleted': 8,
-    'mentorsConnected': 12,
-    'eventsAttended': 5,
-    'skills': ['Flutter', 'React', 'Python', 'Machine Learning'],
-    'interests': ['Software Development', 'Data Science', 'Entrepreneurship'],
-  };
+
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _userId = _auth.currentUser?.uid;
+  }
+
+  Map<String, dynamic> _defaultProfile() {
+    return {
+      'name': 'User',
+      'email': _auth.currentUser?.email ?? 'No email',
+      'university': 'Unknown',
+      'major': 'Unknown',
+      'gradYear': '—',
+      'level': 1,
+      'xp': 0,
+      'xpToNextLevel': 1000,
+      'sessionsCompleted': 0,
+      'mentorsConnected': 0,
+      'eventsAttended': 0,
+      'skills': <String>[],
+      'interests': <String>[],
+    };
+  }
+
+  Map<String, dynamic> _getProfileData(DocumentSnapshot? doc) {
+    if (doc == null || !doc.exists) {
+      return _defaultProfile();
+    }
+
+    return {
+      'name': doc.get('name') as String? ?? 'User',
+      'email': doc.get('email') as String? ?? _auth.currentUser?.email ?? 'No email',
+      'university': doc.get('university') as String? ?? 'Unknown',
+      'major': doc.get('major') as String? ?? 'Unknown',
+      'gradYear': doc.get('gradYear') as String? ?? '—',
+      'level': (doc.get('level') as num?)?.toInt() ?? 1,
+      'xp': (doc.get('xp') as num?)?.toDouble() ?? 0.0,
+      'xpToNextLevel': (doc.get('xpToNextLevel') as num?)?.toDouble() ?? 1000.0,
+      'sessionsCompleted': (doc.get('sessionsCompleted') as num?)?.toInt() ?? 0,
+      'mentorsConnected': (doc.get('mentorsConnected') as num?)?.toInt() ?? 0,
+      'eventsAttended': (doc.get('eventsAttended') as num?)?.toInt() ?? 0,
+      'skills': (doc.get('skills') as List<dynamic>?)?.cast<String>() ?? <String>[],
+      'interests': (doc.get('interests') as List<dynamic>?)?.cast<String>() ?? <String>[],
+    };
+  }
 
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
@@ -49,23 +86,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
-    
+
     if (confirm == true) {
       await _authService.signOut();
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginScreen(role: '')),
-          (route) => false,
-        );
-      }
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen(role: '')),
+        (route) => false,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
+    if (_userId == null) {
+      return Scaffold(
+        body: Center(
+          child: Text(
+            'Not signed in',
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -78,16 +126,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         child: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              _buildHeader(isDark),
-              SliverToBoxAdapter(child: _buildProfileHeader(isDark)),
-              SliverToBoxAdapter(child: _buildLevelProgress(isDark)),
-              SliverToBoxAdapter(child: _buildStatsGrid(isDark)),
-              SliverToBoxAdapter(child: _buildSkillsSection(isDark)),
-              SliverToBoxAdapter(child: _buildMenuSection(isDark)),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: _firestore.collection('users').doc(_userId).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Error loading profile',
+                        style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        snapshot.error.toString(),
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final profile = _getProfileData(snapshot.data);
+
+              return CustomScrollView(
+                slivers: [
+                  _buildHeader(isDark),
+                  SliverToBoxAdapter(child: _buildProfileHeader(isDark, profile)),
+                  SliverToBoxAdapter(child: _buildLevelProgress(isDark, profile)),
+                  SliverToBoxAdapter(child: _buildStatsGrid(isDark, profile)),
+                  SliverToBoxAdapter(child: _buildSkillsSection(isDark, profile)),
+                  SliverToBoxAdapter(child: _buildMenuSection(isDark)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -113,7 +191,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       actions: [
         IconButton(
-          onPressed: () {},
+          onPressed: () {
+            // TODO: Settings screen
+          },
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -128,7 +208,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(bool isDark) {
+  Widget _buildProfileHeader(bool isDark, Map<String, dynamic> profile) {
+    final name = profile['name'] as String? ?? 'User';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -154,7 +237,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    _userProfile['name'][0],
+                    initial,
                     style: const TextStyle(
                       fontSize: 48,
                       fontWeight: FontWeight.bold,
@@ -163,12 +246,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              
               Positioned(
                 bottom: 0,
                 right: 0,
                 child: GestureDetector(
-                  onTap: () {},
+                  onTap: () {
+                    // TODO: Implement profile picture change
+                  },
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -191,35 +275,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          
           const SizedBox(height: 24),
-          
           Text(
-            _userProfile['name'],
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
+            name,
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          
           Text(
-            _userProfile['email'],
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
+            profile['email'] as String? ?? 'No email',
+            style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black54),
           ),
           const SizedBox(height: 16),
-          
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? Colors.white12 : Colors.black12,
-              ),
+              border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -227,11 +299,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Icon(Icons.school_rounded, size: 18, color: Color(0xFF6C63FF)),
                 const SizedBox(width: 8),
                 Text(
-                  '${_userProfile['university']} • ${_userProfile['major']}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  '${profile['university']} • ${profile['major']}',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -241,17 +310,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildLevelProgress(bool isDark) {
-    final progress = _userProfile['xp'] / _userProfile['xpToNextLevel'];
-    
+  Widget _buildLevelProgress(bool isDark, Map<String, dynamic> profile) {
+    final xp = profile['xp'] as double;
+    final xpToNext = profile['xpToNextLevel'] as double;
+    final progress = (xpToNext > 0) ? (xp / xpToNext).clamp(0.0, 1.0) : 0.0;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-          ),
+          gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -275,37 +344,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(
-                        Icons.emoji_events_rounded,
-                        color: Colors.white,
-                        size: 24,
-                      ),
+                      child: const Icon(Icons.emoji_events_rounded, color: Colors.white, size: 24),
                     ),
                     const SizedBox(width: 12),
-                    
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Your Level',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        ),
+                        const Text('Your Level', style: TextStyle(fontSize: 14, color: Colors.white70)),
                         Text(
-                          'Level ${_userProfile['level']}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                          'Level ${profile['level']}',
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ],
                     ),
                   ],
                 ),
-                
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
@@ -313,41 +366,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${_userProfile['xp']} XP',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    '${xp.toInt()} XP',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
               ],
             ),
-            
             const SizedBox(height: 20),
-            
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${(_userProfile['xpToNextLevel'] - _userProfile['xp'])} XP to Level ${_userProfile['level'] + 1}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white70,
-                  ),
+                  '${(xpToNext - xp).toInt()} XP to Level ${(profile['level'] as int) + 1}',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
                 ),
                 Text(
                   '${(progress * 100).toInt()}%',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
@@ -363,7 +402,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatsGrid(bool isDark) {
+  Widget _buildStatsGrid(bool isDark, Map<String, dynamic> profile) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Row(
@@ -371,32 +410,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Expanded(
             child: _buildStatCard(
               isDark,
-              icon: Icons.videocam_rounded,
-              label: 'Sessions',
-              value: '${_userProfile['sessionsCompleted']}',
-              color: const Color(0xFF00D4AA),
+              Icons.videocam_rounded,
+              'Sessions',
+              '${profile['sessionsCompleted']}',
+              const Color(0xFF00D4AA),
             ),
           ),
           const SizedBox(width: 12),
-          
           Expanded(
             child: _buildStatCard(
               isDark,
-              icon: Icons.people_rounded,
-              label: 'Mentors',
-              value: '${_userProfile['mentorsConnected']}',
-              color: const Color(0xFF6C63FF),
+              Icons.people_rounded,
+              'Mentors',
+              '${profile['mentorsConnected']}',
+              const Color(0xFF6C63FF),
             ),
           ),
           const SizedBox(width: 12),
-          
           Expanded(
             child: _buildStatCard(
               isDark,
-              icon: Icons.event_rounded,
-              label: 'Events',
-              value: '${_userProfile['eventsAttended']}',
-              color: const Color(0xFFFF6B9D),
+              Icons.event_rounded,
+              'Events',
+              '${profile['eventsAttended']}',
+              const Color(0xFFFF6B9D),
             ),
           ),
         ],
@@ -404,47 +441,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatCard(
-    bool isDark, {
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
+  Widget _buildStatCard(bool isDark, IconData icon, String label, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-        ),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
       ),
       child: Column(
         children: [
           Icon(icon, color: color, size: 32),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? Colors.white70 : Colors.black54,
-            ),
+            style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSkillsSection(bool isDark) {
+  Widget _buildSkillsSection(bool isDark, Map<String, dynamic> profile) {
+    final skills = profile['skills'] as List<String>;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -453,42 +475,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Skills',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+              const Text('Skills', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  // TODO: Edit skills
+                },
                 child: const Text(
                   'Edit',
-                  style: TextStyle(
-                    color: Color(0xFF6C63FF),
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.w600),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: (_userProfile['skills'] as List).map((skill) {
+            children: skills.map((skill) {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)],
-                  ),
+                  gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   skill,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                 ),
               );
             }).toList(),
@@ -504,67 +516,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Settings',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-          
-          _buildMenuItem(
-            isDark,
-            icon: Icons.person_rounded,
-            title: 'Edit Profile',
-            onTap: () {},
-          ),
-          
-          _buildMenuItem(
-            isDark,
-            icon: Icons.lock_rounded,
-            title: 'Privacy & Security',
-            onTap: () {},
-          ),
-          
+          _buildMenuItem(isDark, Icons.person_rounded, 'Edit Profile', () {}),
+          _buildMenuItem(isDark, Icons.lock_rounded, 'Privacy & Security', () {}),
           _buildSwitchMenuItem(
             isDark,
-            icon: Icons.notifications_rounded,
-            title: 'Notifications',
-            value: _notificationsEnabled,
-            onChanged: (value) {
-              setState(() => _notificationsEnabled = value);
-            },
+            Icons.notifications_rounded,
+            'Notifications',
+            _notificationsEnabled,
+            (v) => setState(() => _notificationsEnabled = v),
           ),
-          
           _buildSwitchMenuItem(
             isDark,
-            icon: Icons.dark_mode_rounded,
-            title: 'Dark Mode',
-            value: _darkModeEnabled,
-            onChanged: (value) {
-              setState(() => _darkModeEnabled = value);
-            },
+            Icons.dark_mode_rounded,
+            'Dark Mode',
+            _darkModeEnabled,
+            (v) => setState(() => _darkModeEnabled = v),
           ),
-          
-          _buildMenuItem(
-            isDark,
-            icon: Icons.help_rounded,
-            title: 'Help & Support',
-            onTap: () {},
-          ),
-          
-          _buildMenuItem(
-            isDark,
-            icon: Icons.info_rounded,
-            title: 'About',
-            onTap: () {},
-          ),
-          
+          _buildMenuItem(isDark, Icons.help_rounded, 'Help & Support', () {}),
+          _buildMenuItem(isDark, Icons.info_rounded, 'About', () {}),
           const SizedBox(height: 16),
-          
           _buildMenuItem(
             isDark,
-            icon: Icons.logout_rounded,
-            title: 'Logout',
-            onTap: () => _handleLogout(),
+            Icons.logout_rounded,
+            'Logout',
+            _handleLogout,
             isDestructive: true,
           ),
         ],
@@ -573,10 +550,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildMenuItem(
-    bool isDark, {
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
+    bool isDark,
+    IconData icon,
+    String title,
+    VoidCallback onTap, {
     bool isDestructive = false,
   }) {
     return GestureDetector(
@@ -587,20 +564,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black12,
-          ),
+          border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
         ),
         child: Row(
           children: [
             Icon(
               icon,
-              color: isDestructive
-                  ? const Color(0xFFFF6B9D)
-                  : const Color(0xFF6C63FF),
+              color: isDestructive ? const Color(0xFFFF6B9D) : const Color(0xFF6C63FF),
             ),
             const SizedBox(width: 16),
-            
             Expanded(
               child: Text(
                 title,
@@ -613,7 +585,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            
             Icon(
               Icons.arrow_forward_ios_rounded,
               size: 16,
@@ -626,27 +597,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSwitchMenuItem(
-    bool isDark, {
-    required IconData icon,
-    required String title,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
+    bool isDark,
+    IconData icon,
+    String title,
+    bool value,
+    ValueChanged<bool> onChanged,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black12,
-        ),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
       ),
       child: Row(
         children: [
           Icon(icon, color: const Color(0xFF6C63FF)),
           const SizedBox(width: 16),
-          
           Expanded(
             child: Text(
               title,
@@ -657,7 +625,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          
           Switch(
             value: value,
             onChanged: onChanged,
