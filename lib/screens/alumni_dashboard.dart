@@ -169,6 +169,29 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                               }
                             },
                           ),
+                        if (user?.isVerified ?? false)
+                          _buildVerificationButton(
+                            icon: Icons.badge,
+                            title: 'View My E-ID',
+                            subtitle: 'Your verified alumni identity card',
+                            color: const Color(0xFF00D4AA),
+                            onTap: () {
+                              final currentUser = FirebaseAuth.instance.currentUser;
+                              if (user != null && currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: currentUser.uid,
+                                      name: user.name,
+                                      email: user.email,
+                                      role: 'alumni',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
                         const SizedBox(height: 16),
                         _buildVerificationButton(
                           icon: Icons.qr_code_scanner,

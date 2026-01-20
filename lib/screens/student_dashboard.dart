@@ -165,6 +165,29 @@ class _StudentDashboardState extends State<StudentDashboard> {
                               }
                             },
                           ),
+                        if (user?.isVerified ?? false)
+                          _buildVerificationButton(
+                            icon: Icons.badge,
+                            title: 'View My E-ID',
+                            subtitle: 'Your verified student identity card',
+                            color: const Color(0xFF00D4AA),
+                            onTap: () {
+                              final currentUser = FirebaseAuth.instance.currentUser;
+                              if (user != null && currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: currentUser.uid,
+                                      name: user.name,
+                                      email: user.email,
+                                      role: 'student',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
                         const SizedBox(height: 16),
                         _buildVerificationButton(
                           icon: Icons.qr_code_scanner,

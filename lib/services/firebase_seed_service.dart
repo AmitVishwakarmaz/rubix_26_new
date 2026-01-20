@@ -104,47 +104,84 @@ class FirebaseSeedService {
         return;
       }
 
-      print('[Seed] Seeding demo data...');
-
-      for (final entry in _universities.entries) {
-        final uniId = entry.key;
-        final uniData = entry.value;
-
-        // Create university document
-        await _firestore.collection('universities').doc(uniId).set({
-          'name': uniData['name'],
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        // Add student_ids subcollection
-        final studentIds = uniData['student_ids'] as Map<String, dynamic>;
-        for (final studentEntry in studentIds.entries) {
-          await _firestore
-              .collection('universities')
-              .doc(uniId)
-              .collection('student_ids')
-              .doc(studentEntry.key)
-              .set(studentEntry.value);
-        }
-
-        // Add alumni_ids subcollection
-        final alumniIds = uniData['alumni_ids'] as Map<String, dynamic>;
-        for (final alumniEntry in alumniIds.entries) {
-          await _firestore
-              .collection('universities')
-              .doc(uniId)
-              .collection('alumni_ids')
-              .doc(alumniEntry.key)
-              .set(alumniEntry.value);
-        }
-
-        print('[Seed] Created university: ${uniData['name']}');
-      }
-
-      print('[Seed] Demo data seeded successfully!');
+      await _createUniversityData();
     } catch (e) {
       print('[Seed] Error seeding data: $e');
     }
+  }
+
+  /// Force re-seed: Delete all existing university data and create fresh
+  Future<void> forceSeedDemoData() async {
+    try {
+      print('[Seed] Force re-seeding: Deleting existing data...');
+
+      // Delete all existing universities
+      final existingUnis = await _firestore.collection('universities').get();
+      for (final uniDoc in existingUnis.docs) {
+        // Delete student_ids subcollection
+        final studentIds = await uniDoc.reference.collection('student_ids').get();
+        for (final doc in studentIds.docs) {
+          await doc.reference.delete();
+        }
+
+        // Delete alumni_ids subcollection
+        final alumniIds = await uniDoc.reference.collection('alumni_ids').get();
+        for (final doc in alumniIds.docs) {
+          await doc.reference.delete();
+        }
+
+        // Delete the university document itself
+        await uniDoc.reference.delete();
+        print('[Seed] Deleted university: ${uniDoc.id}');
+      }
+
+      print('[Seed] All existing universities deleted. Creating fresh data...');
+      await _createUniversityData();
+    } catch (e) {
+      print('[Seed] Error force seeding data: $e');
+    }
+  }
+
+  /// Internal method to create university data
+  Future<void> _createUniversityData() async {
+    print('[Seed] Seeding demo data...');
+
+    for (final entry in _universities.entries) {
+      final uniId = entry.key;
+      final uniData = entry.value;
+
+      // Create university document
+      await _firestore.collection('universities').doc(uniId).set({
+        'name': uniData['name'],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Add student_ids subcollection
+      final studentIds = uniData['student_ids'] as Map<String, dynamic>;
+      for (final studentEntry in studentIds.entries) {
+        await _firestore
+            .collection('universities')
+            .doc(uniId)
+            .collection('student_ids')
+            .doc(studentEntry.key)
+            .set(studentEntry.value);
+      }
+
+      // Add alumni_ids subcollection
+      final alumniIds = uniData['alumni_ids'] as Map<String, dynamic>;
+      for (final alumniEntry in alumniIds.entries) {
+        await _firestore
+            .collection('universities')
+            .doc(uniId)
+            .collection('alumni_ids')
+            .doc(alumniEntry.key)
+            .set(alumniEntry.value);
+      }
+
+      print('[Seed] Created university: ${uniData['name']}');
+    }
+
+    print('[Seed] Demo data seeded successfully!');
   }
 
   /// Get all universities
