@@ -125,6 +125,14 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildProfileSection(bool isDark) {
+    final name = widget.mentor['name'] as String? ?? 'Mentor';
+    final role = widget.mentor['role'] as String? ?? 'Alumni';
+    final company = widget.mentor['company'] as String? ?? 'Company';
+    final experience = widget.mentor['experience'] as String? ?? 'N/A';
+    final responseTime = widget.mentor['responseTime'] as String? ?? 'N/A';
+    final isVerified = widget.mentor['verified'] as bool? ?? false;
+    final matchScore = widget.mentor['matchScore']?.toString() ?? '95';
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -140,8 +148,8 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFF6C63FF + (widget.mentor['name'].hashCode % 1000)),
-                      Color(0xFF4E9FFF + (widget.mentor['name'].hashCode % 1000)),
+                      Color(0xFF6C63FF + (name.hashCode % 1000)),
+                      Color(0xFF4E9FFF + (name.hashCode % 1000)),
                     ],
                   ),
                   boxShadow: [
@@ -154,7 +162,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                 ),
                 child: Center(
                   child: Text(
-                    widget.mentor['name'][0],
+                    name.isNotEmpty ? name[0] : '?',
                     style: const TextStyle(
                       fontSize: 56,
                       fontWeight: FontWeight.bold,
@@ -165,7 +173,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               ),
               
               // Verified Badge
-              if (widget.mentor['verified'] ?? false)
+              if (isVerified)
                 Positioned(
                   bottom: 5,
                   right: 5,
@@ -215,7 +223,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${widget.mentor['matchScore']}%',
+                        '$matchScore%',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -233,7 +241,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           
           // Name & Title
           Text(
-            widget.mentor['name'],
+            name,
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -243,7 +251,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           const SizedBox(height: 8),
           
           Text(
-            widget.mentor['role'],
+            role,
             style: TextStyle(
               fontSize: 16,
               color: isDark ? Colors.white70 : Colors.black54,
@@ -261,7 +269,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              widget.mentor['company'],
+              company,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -276,14 +284,14 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildQuickStat(Icons.work_rounded, widget.mentor['experience']),
+              _buildQuickStat(Icons.work_rounded, experience),
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 width: 1,
                 height: 30,
                 color: isDark ? Colors.white24 : Colors.black12,
               ),
-              _buildQuickStat(Icons.access_time_rounded, widget.mentor['responseTime']),
+              _buildQuickStat(Icons.access_time_rounded, responseTime),
             ],
           ),
         ],
@@ -317,7 +325,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.star_rounded,
               label: 'Rating',
-              value: '${widget.mentor['rating']}',
+              value: '${widget.mentor['rating'] ?? '5.0'}',
               color: Colors.amber,
             ),
           ),
@@ -328,7 +336,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.groups_rounded,
               label: 'Mentees',
-              value: '${widget.mentor['mentees']}',
+              value: '${widget.mentor['mentees'] ?? '0'}',
               color: const Color(0xFF6C63FF),
             ),
           ),
@@ -339,7 +347,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
               isDark,
               icon: Icons.videocam_rounded,
               label: 'Sessions',
-              value: '${widget.mentor['sessions']}',
+              value: '${widget.mentor['sessions'] ?? '0'}',
               color: const Color(0xFF00D4AA),
             ),
           ),
@@ -423,6 +431,11 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildAboutTab(bool isDark) {
+    final role = widget.mentor['role'] as String? ?? 'Alumni';
+    final company = widget.mentor['company'] as String? ?? 'Company';
+    final experience = widget.mentor['experience'] as String? ?? 'N/A';
+    final skills = widget.mentor['skills'] as List<dynamic>? ?? ['Mentoring'];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -435,7 +448,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           const SizedBox(height: 12),
           
           Text(
-            'Passionate ${widget.mentor['role']} at ${widget.mentor['company']} with ${widget.mentor['experience']} of experience. I love helping students navigate their career paths and achieve their goals. My expertise spans across multiple domains, and I\'m always excited to share my knowledge and learn from mentees as well.',
+            'Passionate $role at $company with $experience of experience. I love helping students navigate their career paths and achieve their goals. My expertise spans across multiple domains, and I\'m always excited to share my knowledge and learn from mentees as well.',
             style: TextStyle(
               fontSize: 15,
               height: 1.6,
@@ -454,7 +467,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
           Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: (widget.mentor['skills'] as List).map((skill) {
+            children: skills.map((skill) {
               return Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -474,7 +487,7 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
                   ],
                 ),
                 child: Text(
-                  skill,
+                  skill.toString(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -502,8 +515,11 @@ class _MentorDetailScreenState extends State<MentorDetailScreen>
   }
 
   Widget _buildCareerTimeline(bool isDark) {
+    final role = widget.mentor['role'] as String? ?? 'Alumni';
+    final company = widget.mentor['company'] as String? ?? 'Company';
+    
     final positions = [
-      {'year': '2024 - Present', 'title': widget.mentor['role'], 'company': widget.mentor['company']},
+      {'year': '2024 - Present', 'title': role, 'company': company},
       {'year': '2021 - 2024', 'title': 'Software Engineer', 'company': 'Tech Startup'},
       {'year': '2018 - 2021', 'title': 'Junior Developer', 'company': 'Software Company'},
     ];

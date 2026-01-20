@@ -5,8 +5,9 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import 'mentor_matching_screen.dart';
+import 'mentor_detail_screen.dart';
 import 'resources_screen.dart';
-import 'events_screen.dart';
+import 'student_events_screen.dart';
 import 'profile_screen.dart';
 import 'career_path_screen.dart';
 import 'ai_chat_screen.dart';
@@ -326,48 +327,56 @@ class _StudentDashboardState extends State<StudentDashboard> {
   Widget _buildStatsSection(bool isDark, String uid) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: StreamBuilder<AppUser?>(
-        stream: _firestoreService.streamUser(uid),
-        builder: (context, snapshot) {
-          final user = snapshot.data;
-          final mentorsConnected = user?.mentorsConnected ?? 0;
-          final sessions = user?.totalSessions ?? 0;
-          final level = (user?.xp ?? 0) ~/ 100 + 1;
-
-          return Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: StreamBuilder<int>(
+              stream: _firestoreService.streamAlumniCount(),
+              builder: (context, snapshot) {
+                final alumniCount = snapshot.data ?? 0;
+                return _buildStatCard(
                   isDark,
                   icon: Icons.people_rounded,
                   label: 'Mentors',
-                  value: '$mentorsConnected',
+                  value: '$alumniCount',
                   gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildStatCard(
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: StreamBuilder<AppUser?>(
+              stream: _firestoreService.streamUser(uid),
+              builder: (context, snapshot) {
+                final sessions = snapshot.data?.totalSessions ?? 0;
+                return _buildStatCard(
                   isDark,
                   icon: Icons.calendar_today_rounded,
                   label: 'Sessions',
                   value: '$sessions',
                   gradient: const LinearGradient(colors: [Color(0xFFFF6B9D), Color(0xFFFFA726)]),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildStatCard(
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: StreamBuilder<AppUser?>(
+              stream: _firestoreService.streamUser(uid),
+              builder: (context, snapshot) {
+                final level = (snapshot.data?.xp ?? 0) ~/ 100 + 1;
+                return _buildStatCard(
                   isDark,
                   icon: Icons.emoji_events_rounded,
                   label: 'Level',
                   value: '$level',
                   gradient: const LinearGradient(colors: [Color(0xFF00D4AA), Color(0xFF00A896)]),
-                ),
-              ),
-            ],
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -404,9 +413,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
               return GestureDetector(
                 onTap: () {
                   if (isVerified) {
+                    // Navigate to mentor detail screen
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const MentorMatchingScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => MentorDetailScreen(
+                          mentor: {
+                            'name': mentor.name,
+                            'role': mentor.jobRole ?? 'Alumni',
+                            'company': mentor.currentCompany ?? 'Company',
+                            'experience': '3+ years',
+                            'matchScore': matchScore,
+                            'rating': 5.0,
+                            'mentees': 12,
+                            'sessions': 24,
+                            'availability': 'High',
+                            'responseTime': '< 24h',
+                            'verified': mentor.isVerified,
+                            'skills': mentor.skills ?? [],
+                          },
+                        ),
+                      ),
                     );
                   } else {
                     _showVerificationRequired();
@@ -574,7 +601,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
         'icon': Icons.event_rounded,
         'title': 'Events',
         'color': const Color(0xFFFFA726),
-        'screen': const EventsScreen(),
+        'screen': const StudentEventsScreen(),
         'locked': false,
       },
       {
@@ -799,7 +826,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
         if (isExplore) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityScreen()));
         } else if (isEvents) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentEventsScreen()));
         } else {
           setState(() => _selectedIndex = index);
         }
