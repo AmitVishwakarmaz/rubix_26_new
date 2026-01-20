@@ -33,6 +33,7 @@ class AppUser {
   // Gamification & Stats
   final int xp;
   final int totalSessions;
+  final int mentorsConnected;
 
   final String? profileImageUrl;
 
@@ -45,6 +46,7 @@ class AppUser {
     this.profileCompleted = false,
     this.xp = 0,
     this.totalSessions = 0,
+    this.mentorsConnected = 0,
     this.profileImageUrl,
     // Student fields
     this.university,
@@ -73,6 +75,7 @@ class AppUser {
       profileCompleted: map['profileCompleted'] ?? false,
       xp: map['xp'] ?? 0,
       totalSessions: map['totalSessions'] ?? 0,
+      mentorsConnected: map['mentorsConnected'] ?? 0,
       profileImageUrl: map['profileImageUrl'],
       // Student fields
       university: map['university'],
@@ -112,6 +115,7 @@ class AppUser {
       'profileCompleted': profileCompleted,
       'xp': xp,
       'totalSessions': totalSessions,
+      'mentorsConnected': mentorsConnected,
       if (profileImageUrl != null) 'profileImageUrl': profileImageUrl,
       // Student fields
       if (university != null) 'university': university,
@@ -155,6 +159,7 @@ class AppUser {
     bool? profileCompleted,
     int? xp,
     int? totalSessions,
+    int? mentorsConnected,
     String? profileImageUrl,
     String? university,
     String? degree,
@@ -178,6 +183,7 @@ class AppUser {
       profileCompleted: profileCompleted ?? this.profileCompleted,
       xp: xp ?? this.xp,
       totalSessions: totalSessions ?? this.totalSessions,
+      mentorsConnected: mentorsConnected ?? this.mentorsConnected,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       university: university ?? this.university,
       degree: degree ?? this.degree,

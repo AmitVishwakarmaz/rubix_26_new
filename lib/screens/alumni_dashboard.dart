@@ -69,7 +69,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
     }
 
     final List<Widget> screens = [
-      _buildHomeContent(isDark, uid),
+      Navigator(
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            builder: (_) => _buildHomeContent(isDark, uid),
+          );
+        },
+      ),
       const ProfileScreen(),
     ];
 
