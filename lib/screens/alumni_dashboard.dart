@@ -116,6 +116,20 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                 SliverToBoxAdapter(child: _buildStatsSection(isDark, uid)),
                 SliverToBoxAdapter(
                   child: _buildSectionTitle(
+                    'Sessions Today',
+                    'View All',
+                    isDark,
+                    () {
+                      // TODO: Navigate to full sessions screen
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Full sessions screen coming soon!')),
+                      );
+                    },
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildSessionsTodayPreview(isDark, uid)),
+                SliverToBoxAdapter(
+                  child: _buildSectionTitle(
                     'Pending Requests',
                     'View All',
                     isDark,
@@ -455,6 +469,277 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSessionsTodayPreview(bool isDark, String uid) {
+    return StreamBuilder<List<SessionBooking>>(
+      stream: _firestoreService.streamMentorBookings(uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final sessions = snapshot.data ?? [];
+
+        if (sessions.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.event_busy_rounded,
+                    size: 48,
+                    color: isDark ? Colors.white38 : Colors.black26,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No upcoming sessions',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sessions booked by students will appear here',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Show up to 3 sessions in preview
+        final displaySessions = sessions.take(3).toList();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: displaySessions.map((session) {
+              return _buildSessionCard(session, isDark);
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSessionCard(SessionBooking session, bool isDark) {
+    Color statusColor;
+    String statusText;
+
+    switch (session.status.toLowerCase()) {
+      case 'confirmed':
+        statusColor = const Color(0xFF00D4AA);
+        statusText = 'CONFIRMED';
+        break;
+      case 'completed':
+        statusColor = const Color(0xFF6C63FF);
+        statusText = 'COMPLETED';
+        break;
+      case 'cancelled':
+        statusColor = const Color(0xFFFF6B9D);
+        statusText = 'CANCELLED';
+        break;
+      default:
+        statusColor = const Color(0xFFFFA726);
+        statusText = 'PENDING';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF6C63FF + (session.studentName.hashCode % 1000)),
+                      Color(0xFF4E9FFF + (session.studentName.hashCode % 1000)),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    session.studentName.isNotEmpty ? session.studentName[0].toUpperCase() : 'S',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.studentName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Purpose: ${session.purpose}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: statusColor.withOpacity(0.5)),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(
+                Icons.calendar_today_rounded,
+                size: 16,
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                session.date,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Icon(
+                Icons.access_time_rounded,
+                size: 16,
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                session.time,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white70 : Colors.black54,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.timer_outlined,
+                      size: 14,
+                      color: Color(0xFF6C63FF),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      session.duration,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6C63FF),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (session.notes != null && session.notes!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.note_rounded,
+                    size: 16,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      session.notes!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
+import '../services/firestore_service.dart';
+import '../models/new_model.dart';
 
 class SessionBookingScreen extends StatefulWidget {
   final Map<String, dynamic> mentor;
@@ -16,6 +20,9 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
   String? _selectedDuration;
   String? _selectedPurpose;
   final _notesController = TextEditingController();
+  final FirestoreService _firestoreService = FirestoreService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isBooking = false;
 
   final List<String> _purposes = [
     'Career Guidance',
@@ -75,11 +82,62 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
     }
   }
 
-  void _confirmBooking() {
-    showDialog(
-      context: context,
-      builder: (context) => _buildSuccessDialog(),
-    );
+  void _confirmBooking() async {
+    if (_isBooking) return;
+    
+    setState(() => _isBooking = true);
+
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Get current user data
+      final userData = await _firestoreService.getUser(currentUser.uid);
+      if (userData == null) {
+        throw Exception('User data not found');
+      }
+
+      // Create session booking
+      final booking = SessionBooking(
+        id: const Uuid().v4(),
+        studentId: currentUser.uid,
+        studentName: userData.name,
+        mentorId: widget.mentor['userId'] ?? widget.mentor['id'] ?? '',
+        mentorName: widget.mentor['name'] ?? '',
+        purpose: _selectedPurpose ?? '',
+        duration: _selectedDuration ?? '',
+        date: _selectedDate ?? '',
+        time: _selectedTime ?? '',
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        status: 'pending',
+        createdAt: DateTime.now(),
+      );
+
+      // Save to Firebase
+      await _firestoreService.createSessionBooking(booking);
+
+      setState(() => _isBooking = false);
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => _buildSuccessDialog(),
+        );
+      }
+    } catch (e) {
+      setState(() => _isBooking = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error booking session: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -716,7 +774,7 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
             Expanded(
               flex: 2,
               child: ElevatedButton(
-                onPressed: _canProceed ? _nextStep : null,
+                onPressed: (_canProceed && !_isBooking) ? _nextStep : null,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: const Color(0xFF6C63FF),
@@ -725,14 +783,23 @@ class _SessionBookingScreenState extends State<SessionBookingScreen> {
                   ),
                   disabledBackgroundColor: Colors.grey,
                 ),
-                child: Text(
-                  _currentStep == 3 ? 'Confirm Booking' : 'Continue',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                child: _isBooking && _currentStep == 3
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        _currentStep == 3 ? 'Confirm Booking' : 'Continue',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
           ],

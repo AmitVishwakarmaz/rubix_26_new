@@ -105,3 +105,66 @@ class MentorshipRequest {
     );
   }
 }
+
+class SessionBooking {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final String mentorId;
+  final String mentorName;
+  final String purpose;
+  final String duration;
+  final String date;
+  final String time;
+  final String? notes;
+  final String status; // 'pending', 'confirmed', 'completed', 'cancelled'
+  final DateTime createdAt;
+
+  SessionBooking({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.mentorId,
+    required this.mentorName,
+    required this.purpose,
+    required this.duration,
+    required this.date,
+    required this.time,
+    this.notes,
+    required this.status,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'studentId': studentId,
+      'studentName': studentName,
+      'mentorId': mentorId,
+      'mentorName': mentorName,
+      'purpose': purpose,
+      'duration': duration,
+      'date': date,
+      'time': time,
+      'notes': notes,
+      'status': status,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
+  }
+
+  factory SessionBooking.fromMap(Map<String, dynamic> map, String id) {
+    return SessionBooking(
+      id: id,
+      studentId: map['studentId'] ?? '',
+      studentName: map['studentName'] ?? '',
+      mentorId: map['mentorId'] ?? '',
+      mentorName: map['mentorName'] ?? '',
+      purpose: map['purpose'] ?? '',
+      duration: map['duration'] ?? '',
+      date: map['date'] ?? '',
+      time: map['time'] ?? '',
+      notes: map['notes'],
+      status: map['status'] ?? 'pending',
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+    );
+  }
+}

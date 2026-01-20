@@ -352,4 +352,52 @@ class FirestoreService {
   Future<void> sendMentorshipRequest(MentorshipRequest request) async {
     await _firestore.collection('mentorship_requests').doc(request.id).set(request.toMap());
   }
+
+  // ──────────────────────────────────────────────
+  //  Session Booking Management
+  // ──────────────────────────────────────────────
+
+  /// Create a new session booking
+  Future<void> createSessionBooking(SessionBooking booking) async {
+    await _firestore.collection('session_bookings').doc(booking.id).set(booking.toMap());
+  }
+
+  /// Stream all session bookings for a student
+  Stream<List<SessionBooking>> streamStudentBookings(String studentId) {
+    return _firestore.collection('session_bookings')
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => SessionBooking.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Stream all session bookings for a mentor
+  Stream<List<SessionBooking>> streamMentorBookings(String mentorId) {
+    return _firestore.collection('session_bookings')
+        .where('mentorId', isEqualTo: mentorId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => SessionBooking.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  /// Update session booking status
+  Future<void> updateBookingStatus(String bookingId, String status) async {
+    await _firestore.collection('session_bookings').doc(bookingId).update({'status': status});
+  }
+
+  /// Get a specific session booking
+  Future<SessionBooking?> getSessionBooking(String bookingId) async {
+    final doc = await _firestore.collection('session_bookings').doc(bookingId).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return SessionBooking.fromMap(doc.data()!, doc.id);
+  }
+
+  /// Delete a session booking
+  Future<void> deleteSessionBooking(String bookingId) async {
+    await _firestore.collection('session_bookings').doc(bookingId).delete();
+  }
 }
