@@ -105,3 +105,82 @@ class MentorshipRequest {
     );
   }
 }
+
+/// Event model for storing event data in Firestore
+class Event {
+  final String id;
+  final String title;
+  final String description;
+  final DateTime eventDate;
+  final String time;
+  final String type; // 'In-Person', 'Online', 'Hybrid'
+  final String location;
+  final int maxAttendees;
+  final List<String> registeredUserIds;
+  final List<String> tags;
+  final List<String> speakers;
+  final String createdByUserId;
+  final String createdByName;
+  final DateTime createdAt;
+
+  Event({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.eventDate,
+    required this.time,
+    required this.type,
+    required this.location,
+    required this.maxAttendees,
+    required this.registeredUserIds,
+    required this.tags,
+    required this.speakers,
+    required this.createdByUserId,
+    required this.createdByName,
+    required this.createdAt,
+  });
+
+  int get attendeesCount => registeredUserIds.length;
+  bool get isFull => attendeesCount >= maxAttendees;
+  bool get isPast => eventDate.isBefore(DateTime.now());
+  bool get isUpcoming => eventDate.isAfter(DateTime.now());
+
+  bool isUserRegistered(String userId) => registeredUserIds.contains(userId);
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'description': description,
+      'eventDate': Timestamp.fromDate(eventDate),
+      'time': time,
+      'type': type,
+      'location': location,
+      'maxAttendees': maxAttendees,
+      'registeredUserIds': registeredUserIds,
+      'tags': tags,
+      'speakers': speakers,
+      'createdByUserId': createdByUserId,
+      'createdByName': createdByName,
+      'createdAt': Timestamp.fromDate(createdAt),
+    };
+  }
+
+  factory Event.fromMap(Map<String, dynamic> map, String id) {
+    return Event(
+      id: id,
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      eventDate: (map['eventDate'] as Timestamp).toDate(),
+      time: map['time'] ?? '',
+      type: map['type'] ?? 'In-Person',
+      location: map['location'] ?? '',
+      maxAttendees: map['maxAttendees'] ?? 0,
+      registeredUserIds: List<String>.from(map['registeredUserIds'] ?? []),
+      tags: List<String>.from(map['tags'] ?? []),
+      speakers: List<String>.from(map['speakers'] ?? []),
+      createdByUserId: map['createdByUserId'] ?? '',
+      createdByName: map['createdByName'] ?? '',
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+    );
+  }
+}

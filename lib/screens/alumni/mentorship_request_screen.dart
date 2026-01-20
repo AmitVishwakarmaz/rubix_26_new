@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/firestore_service.dart';
 import '../../services/auth_service.dart';
-import '../../models/new_models.dart';
+import '../../models/new_model.dart';
 
 class MentorshipRequestsScreen extends StatelessWidget {
   const MentorshipRequestsScreen({Key? key}) : super(key: key);

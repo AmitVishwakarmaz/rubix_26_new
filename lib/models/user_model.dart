@@ -34,6 +34,9 @@ class AppUser {
   final int xp;
   final int totalSessions;
   final int mentorsConnected;
+  
+  // Saved Alumni (for students)
+  final List<String>? savedAlumniIds;
 
   final String? profileImageUrl;
 
@@ -62,6 +65,7 @@ class AppUser {
     this.industry,
     this.linkedinUrl,
     this.mentorshipInterests,
+    this.savedAlumniIds,
   });
 
   /// Create from Firestore document
@@ -91,6 +95,7 @@ class AppUser {
       industry: map['industry'],
       linkedinUrl: map['linkedinUrl'],
       mentorshipInterests: (map['mentorshipInterests'] as List<dynamic>?)?.cast<String>(),
+      savedAlumniIds: (map['savedAlumniIds'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
@@ -131,6 +136,7 @@ class AppUser {
       if (industry != null) 'industry': industry,
       if (linkedinUrl != null) 'linkedinUrl': linkedinUrl,
       if (mentorshipInterests != null) 'mentorshipInterests': mentorshipInterests,
+      if (savedAlumniIds != null) 'savedAlumniIds': savedAlumniIds,
     };
   }
 
@@ -173,6 +179,7 @@ class AppUser {
     String? industry,
     String? linkedinUrl,
     List<String>? mentorshipInterests,
+    List<String>? savedAlumniIds,
   }) {
     return AppUser(
       userId: userId,
@@ -197,6 +204,7 @@ class AppUser {
       industry: industry ?? this.industry,
       linkedinUrl: linkedinUrl ?? this.linkedinUrl,
       mentorshipInterests: mentorshipInterests ?? this.mentorshipInterests,
+      savedAlumniIds: savedAlumniIds ?? this.savedAlumniIds,
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/gemini_service.dart';
+import '../models/user_model.dart';
 
 class AIChatScreen extends StatefulWidget {
   const AIChatScreen({Key? key}) : super(key: key);
@@ -18,6 +20,9 @@ class _AIChatScreenState extends State<AIChatScreen>
   
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  final GeminiService _geminiService = GeminiService();
+  
+  AppUser? _currentUser;
   String? _userRole;
 
   List<String> _quickQuestions = [];
@@ -31,7 +36,9 @@ class _AIChatScreenState extends State<AIChatScreen>
   Future<void> _initializeChat() async {
     final user = _authService.currentUser;
     if (user != null) {
-      _userRole = await _firestoreService.getUserRole(user.uid);
+      // Fetch full user profile for context
+      _currentUser = await _firestoreService.getUser(user.uid);
+      _userRole = _currentUser?.role;
     }
     _setupQuickQuestions();
     _addWelcomeMessage();
@@ -49,8 +56,8 @@ class _AIChatScreenState extends State<AIChatScreen>
       _quickQuestions = [
         'How do I prepare for interviews?',
         'What skills should I learn?',
-        'Career path for CS major?',
-        'Best companies for internships?',
+        'Career path for my major?',
+        'How to approach a mentor?',
       ];
     }
     if (mounted) setState(() {});
@@ -62,9 +69,9 @@ class _AIChatScreenState extends State<AIChatScreen>
       setState(() {
         String welcomeText;
         if (_userRole == 'alumni') {
-          welcomeText = 'Hi! I\'m your Alumni Assistant 👋\n\nI can help you with:\n• Finding mentees\n• Drafting job descriptions\n• Mentorship guides\n• Scheduling sessions\n\nHow can I support your mentorship journey today?';
+          welcomeText = 'Hi! I\'m your Alumni Assistant. 👋\n\nI can help you with:\n• Finding mentees\n• Drafting job descriptions\n• Mentorship guides\n• Scheduling sessions\n\nHow can I support your mentorship journey today?';
         } else {
-          welcomeText = 'Hi! I\'m your AI Career Assistant 👋\n\nI can help you with:\n• Career guidance\n• Interview preparation\n• Skill development\n• Mentor recommendations\n\nHow can I assist you today?';
+          welcomeText = 'Hi! I\'m your AI Career Assistant. 👋\n\nI can help you with:\n• Career guidance\n• Interview preparation\n• Skill development\n• Mentor recommendations\n\nHow can I assist you today?';
         }
         
         _messages.add(ChatMessage(
@@ -86,64 +93,86 @@ class _AIChatScreenState extends State<AIChatScreen>
   void _handleSendMessage(String text) {
     if (text.trim().isEmpty) return;
 
-    setState(() {
-      _messages.add(ChatMessage(
+    final userMsg = ChatMessage(
         text: text,
         isUser: true,
         timestamp: DateTime.now(),
-      ));
+    );
+
+    setState(() {
+      _messages.add(userMsg);
       _messageController.clear();
       _isTyping = true;
     });
 
     _scrollToBottom();
 
-    // Simulate AI response
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(ChatMessage(
-          text: _generateAIResponse(text),
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-        _isTyping = false;
-      });
-      _scrollToBottom();
-    });
-  }
+    // Placeholder message for streaming response
+    final aiMsg = ChatMessage(
+      text: '',
+      isUser: false,
+      timestamp: DateTime.now(),
+      isStreaming: true,
+    );
 
-  String _generateAIResponse(String userMessage) {
-    final lower = userMessage.toLowerCase();
-    
-    if (_userRole == 'alumni') {
-       if (lower.contains('help') || lower.contains('student')) {
-         return 'To help students effectively, consider:\n\n1. Updating your profile with current skills\n2. Posting open office hours\n3. Browsing mentorship requests\n4. Offering mock interviews\n\nWould you like to see pending requests?';
-       } else if (lower.contains('job') || lower.contains('post')) {
-         return 'I can help you structure a job post. Key elements to include:\n\n• Role Title & Department\n• Key Responsibilities\n• Required Skills (Technical & Soft)\n• Company Culture highlights\n\nShall I open the "Post Job" form for you?';
-       } else if (lower.contains('topic') || lower.contains('guide')) {
-          return 'Great mentorship topics include:\n\n• Code reviews & best practices\n• System design basics\n• Soft skills in the workplace\n• Resume & LinkedIn reviews\n• Mock interviews\n\nPick one to start a session!';
-       } else {
-         return 'I can assist you with your alumni activities. Try asking about:\n\n• Managing mentees\n• Posting jobs\n• Mentorship best practices';
-       }
-    } else {
-      // Student Logic
-      if (lower.contains('interview')) {
-        return 'Great question about interviews! Here are my top tips:\n\n1. **Practice Common Questions**: Use resources from our library\n2. **Mock Interviews**: Book sessions with alumni\n3. **Research the Company**: Check our company guides\n4. **STAR Method**: Structure your answers properly\n\nWould you like me to connect you with alumni who can help with interview prep?';
-      } else if (lower.contains('skill')) {
-        return 'Skill development is crucial! Based on your profile, I recommend:\n\n• **Technical Skills**: Focus on your major-specific tools\n• **Soft Skills**: Communication & Leadership\n• **Industry Tools**: Check trending technologies\n\nI can recommend specific courses and mentors. Interested?';
-      } else if (lower.contains('career') || lower.contains('path')) {
-        return 'Let me help you explore career paths! I noticed you\'re studying Computer Science.\n\nPopular paths include:\n• Software Engineering\n• Data Science\n• Product Management\n• DevOps\n\nCheck out our Career Path Visualizer for detailed roadmaps!';
-      } else if (lower.contains('mentor') || lower.contains('alumni')) {
-        return 'I found 15 alumni that match your profile!\n\nTop recommendations:\n• Sarah Johnson - Google (95% match)\n• Michael Chen - Microsoft (92% match)\n• Priya Patel - Meta (88% match)\n\nWould you like to see their full profiles?';
-      } else {
-        return 'I understand you\'re asking about "${userMessage}". \n\nHere\'s what I can do:\n• Find you relevant alumni\n• Suggest learning resources\n• Show career paths\n• Connect you with mentors\n\nCould you provide more specific details about what you\'re looking for?';
+    setState(() {
+      _messages.add(aiMsg);
+    });
+
+    // Accumulate the response
+    StringBuffer responseBuffer = StringBuffer();
+
+    _geminiService.generateResponseStream(text, _currentUser).listen(
+      (chunk) {
+        responseBuffer.write(chunk);
+        if (mounted) {
+          setState(() {
+            // Update the last message (which is our AI placeholder)
+            if (_messages.isNotEmpty && !_messages.last.isUser) {
+              _messages.last = ChatMessage(
+                  text: responseBuffer.toString(),
+                  isUser: false,
+                  timestamp: DateTime.now(),
+                  isStreaming: true
+              );
+            }
+          });
+          _scrollToBottom();
+        }
+      },
+      onDone: () {
+        if (mounted) {
+          setState(() {
+             _isTyping = false;
+             if (_messages.isNotEmpty && !_messages.last.isUser) {
+                // Finalize the message
+                _messages.last = ChatMessage(
+                  text: responseBuffer.toString(),
+                  isUser: false,
+                  timestamp: DateTime.now(),
+                  isStreaming: false,
+                );
+             }
+          });
+        }
+      },
+      onError: (e) {
+         if (mounted) {
+          setState(() {
+             _isTyping = false;
+             _messages.add(ChatMessage(
+                text: "Sorry, I encountered an error. Please try again.",
+                isUser: false,
+                timestamp: DateTime.now(),
+             ));
+          });
+        }
       }
-    }
+    );
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -178,7 +207,7 @@ class _AIChatScreenState extends State<AIChatScreen>
                   children: [
                     Expanded(child: _buildMessageList(isDark)),
                     if (_messages.length <= 1) _buildQuickQuestions(isDark),
-                    if (_isTyping) _buildTypingIndicator(isDark),
+                    if (_isTyping && _messages.last.isUser) _buildTypingIndicator(isDark), // Show dots only if waiting for stream to start
                     _buildInputArea(isDark),
                   ],
                 ),
@@ -233,7 +262,7 @@ class _AIChatScreenState extends State<AIChatScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'AI Assistant',
+                  'Gemini AI Assistant',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -560,10 +589,12 @@ class ChatMessage {
   final String text;
   final bool isUser;
   final DateTime timestamp;
+  final bool isStreaming;
 
   ChatMessage({
     required this.text,
     required this.isUser,
     required this.timestamp,
+    this.isStreaming = false,
   });
 }

@@ -7,7 +7,7 @@ import '../models/user_model.dart';
 import '../models/new_model.dart'; // assuming MentorshipRequest is here
 
 import 'resources_screen.dart';
-import 'events_screen.dart';
+import 'alumni_events_screen.dart';
 import 'profile_screen.dart';
 import 'ai_chat_screen.dart';
 import 'alumni/mentorship_requests_screen.dart';
@@ -507,7 +507,7 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
         'icon': Icons.event_available_rounded,
         'title': 'Manage Events',
         'color': const Color(0xFFFFA726),
-        'screen': const EventsScreen(),
+        'screen': const AlumniEventsScreen(),
         'locked': false,
       },
       {
