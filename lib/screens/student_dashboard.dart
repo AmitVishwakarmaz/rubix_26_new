@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+                                           
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import 'mentor_matching_screen.dart';
 import 'resources_screen.dart';
 import 'events_screen.dart';
-import 'profile_screen.dart';
+import 'profile_screen.dart';                      
 import 'career_path_screen.dart';
 import 'ai_chat_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
+import 'community/community_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -147,6 +148,29 @@ class _StudentDashboardState extends State<StudentDashboard> {
                             title: 'Request University Verification',
                             subtitle: 'Verify your student ID',
                             color: Colors.blue.shade600,
+                            onTap: () {
+                              final currentUser = FirebaseAuth.instance.currentUser;
+                              if (user != null && currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: currentUser.uid,
+                                      name: user.name,
+                                      email: user.email,
+                                      role: 'student',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        if (user?.isVerified ?? false)
+                          _buildVerificationButton(
+                            icon: Icons.badge,
+                            title: 'View My E-ID',
+                            subtitle: 'Your verified student identity card',
+                            color: const Color(0xFF00D4AA),
                             onTap: () {
                               final currentUser = FirebaseAuth.instance.currentUser;
                               if (user != null && currentUser != null) {
@@ -773,11 +797,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     return GestureDetector(
       onTap: () {
         if (isExplore) {
-          if (isVerified) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const MentorMatchingScreen()));
-          } else {
-            _showVerificationRequired();
-          }
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityScreen()));
         } else if (isEvents) {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
         } else {

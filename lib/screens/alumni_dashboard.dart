@@ -13,9 +13,9 @@ import 'ai_chat_screen.dart';
 import 'alumni/mentorship_requests_screen.dart';
 import 'alumni/post_job_screen.dart';
 import 'alumni/my_mentees_screen.dart';
-import 'alumni/upload_resource_screen.dart';
 import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
+import 'community/community_screen.dart';
 
 class AlumniDashboard extends StatefulWidget {
   const AlumniDashboard({super.key});
@@ -152,6 +152,29 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
                             title: 'Request University/Alumni Verification',
                             subtitle: 'Verify your alumni status',
                             color: Colors.blue.shade600,
+                            onTap: () {
+                              final currentUser = FirebaseAuth.instance.currentUser;
+                              if (user != null && currentUser != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => VerificationRequestScreen(
+                                      userId: currentUser.uid,
+                                      name: user.name,
+                                      email: user.email,
+                                      role: 'alumni',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        if (user?.isVerified ?? false)
+                          _buildVerificationButton(
+                            icon: Icons.badge,
+                            title: 'View My E-ID',
+                            subtitle: 'Your verified alumni identity card',
+                            color: const Color(0xFF00D4AA),
                             onTap: () {
                               final currentUser = FirebaseAuth.instance.currentUser;
                               if (user != null && currentUser != null) {
@@ -518,13 +541,6 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
         'screen': const ResourcesScreen(),
         'locked': false,
       },
-      {
-        'icon': Icons.upload_file_rounded,
-        'title': 'Upload Resource',
-        'color': const Color(0xFFFF9800),
-        'screen': const ResourcesScreen(),
-        'locked': !isVerified,
-      },
     ];
 
     return Padding(
@@ -717,7 +733,9 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildNavItem(0, Icons.dashboard_rounded, 'Home', null),
+              _buildNavItem(-1, Icons.explore_rounded, 'Explore', const CommunityScreen()),
               const SizedBox(width: 64),
+              _buildNavItem(-1, Icons.event_rounded, 'Events', const EventsScreen()),
               _buildNavItem(1, Icons.person_rounded, 'Profile', null),
             ],
           ),
@@ -727,11 +745,14 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
   }
 
   Widget _buildNavItem(int index, IconData icon, String label, Widget? screen) {
-    final isSelected = _selectedIndex == index;
+    final isSelected = _selectedIndex == index && index >= 0;
     return GestureDetector(
       onTap: () {
-        setState(() => _selectedIndex = index);
-        // screen navigation not used here (already using IndexedStack)
+        if (screen != null) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+        } else if (index >= 0) {
+          setState(() => _selectedIndex = index);
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -739,13 +760,13 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
           Icon(
             icon,
             color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
-            size: 24,
+            size: 28,
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
             ),

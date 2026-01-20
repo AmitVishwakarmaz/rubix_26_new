@@ -172,7 +172,7 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -267,14 +267,15 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
         ),
         actions: [
           ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              // Refresh data from Firestore to get actual status
+              await _checkExistingVerification();
             },
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
             ),
-            child: const Text('View My E-ID'),
+            child: const Text('Done'),
           ),
         ],
       ),
@@ -285,8 +286,12 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.role == 'student' ? 'Student' : 'Alumni'} Verification'),
+        title: Text(widget.role == 'student' ? 'Student Verification' : 'Alumni Verification'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: _isLoading
           ? const Center(
@@ -520,7 +525,14 @@ class _VerificationRequestScreenState extends State<VerificationRequestScreen> {
   Widget _buildExistingEIDView() {
     final eid = _existingVerification!['eid'] as String?;
     final qrBase64 = _existingVerification!['qr_base64'] as String?;
-    final status = _existingVerification!['status'] as String? ?? 'pending';
+    // Check both verification_request status AND user profile verificationStatus
+    var status = _existingVerification!['status'] as String? ?? 'pending';
+    // If user profile says verified, use that (it's the source of truth)
+    if (_userProfile?.isVerified == true) {
+      status = 'verified';
+    } else if (_userProfile?.isRejected == true) {
+      status = 'rejected';
+    }
     final autoMatched = _existingVerification!['autoMatched'] as bool? ?? false;
     
     return SingleChildScrollView(
