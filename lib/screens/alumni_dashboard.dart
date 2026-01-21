@@ -11,7 +11,7 @@ import 'alumni_events_screen.dart';
 import 'profile_screen.dart';
 import 'ai_chat_screen.dart';
 import 'alumni/mentorship_requests_screen.dart';
-import 'alumni/post_job_screen.dart';
+import 'alumni/referral_availability_screen.dart';
 import 'alumni/my_mentees_screen.dart';
 import 'alumni/pending_sessions_screen.dart';
 import 'verification_request_screen.dart';
@@ -638,10 +638,10 @@ class _AlumniDashboardState extends State<AlumniDashboard> {
   Widget _buildFeatureGrid(bool isDark) {
     final features = [
       {
-        'icon': Icons.campaign_rounded,
-        'title': 'Post a Job',
+        'icon': Icons.volunteer_activism_rounded,
+        'title': 'Referrals',
         'color': const Color(0xFF6C63FF),
-        'screen': const PostJobScreen(),
+        'screen': const ReferralAvailabilityScreen(),
         'locked': !isVerified,
       },
       {

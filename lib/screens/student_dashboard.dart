@@ -16,6 +16,7 @@ import 'verification_request_screen.dart';
 import 'qr_verification_screen.dart';
 import 'community/community_screen.dart';
 import 'student_sessions_screen.dart';
+import 'referrals_screen.dart';
 
 class StudentDashboard extends StatefulWidget {
   const StudentDashboard({super.key});
@@ -126,6 +127,28 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   child: _buildSectionTitle('Quick Access', '', isDark, null),
                 ),
                 SliverToBoxAdapter(child: _buildFeatureGrid(isDark)),
+                // Referrals Card - Full Width
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    child: _buildVerificationButton(
+                      icon: Icons.volunteer_activism_rounded,
+                      title: 'Get Referrals',
+                      subtitle: 'Browse alumni referrals for your dream job',
+                      color: const Color(0xFF9C27B0),
+                      onTap: () {
+                        if (!isVerified) {
+                          _showVerificationRequired();
+                          return;
+                        }
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ReferralsScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -621,7 +644,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
           crossAxisCount: 2,
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 1.3, // Reduced from 1.5 to give more height
+          childAspectRatio: 1.3,
         ),
         itemCount: features.length,
         itemBuilder: (context, index) {
