@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
@@ -26,6 +28,9 @@ class _AIChatScreenState extends State<AIChatScreen>
   String? _userRole;
 
   List<String> _quickQuestions = [];
+  
+  // SharedPreferences key for chat history
+  static const String _chatHistoryKey = 'ai_chat_history';
 
   @override
   void initState() {
@@ -41,7 +46,75 @@ class _AIChatScreenState extends State<AIChatScreen>
       _userRole = _currentUser?.role;
     }
     _setupQuickQuestions();
-    _addWelcomeMessage();
+    
+    // Load saved chat history
+    await _loadChatHistory();
+    
+    // Only add welcome message if no history exists
+    if (_messages.isEmpty) {
+      _addWelcomeMessage();
+    }
+  }
+  
+  // Load chat history from SharedPreferences
+  Future<void> _loadChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = _authService.currentUser?.uid ?? 'guest';
+      final key = '${_chatHistoryKey}_$userId';
+      
+      final String? historyJson = prefs.getString(key);
+      if (historyJson != null && historyJson.isNotEmpty) {
+        final List<dynamic> historyList = json.decode(historyJson);
+        setState(() {
+          _messages.clear();
+          _messages.addAll(historyList.map((item) => ChatMessage.fromJson(item)).toList());
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      print('Error loading chat history: $e');
+    }
+  }
+  
+  // Save chat history to SharedPreferences
+  Future<void> _saveChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = _authService.currentUser?.uid ?? 'guest';
+      final key = '${_chatHistoryKey}_$userId';
+      
+      final historyJson = json.encode(_messages.map((m) => m.toJson()).toList());
+      await prefs.setString(key, historyJson);
+    } catch (e) {
+      print('Error saving chat history: $e');
+    }
+  }
+  
+  // Delete all chat history
+  Future<void> _deleteHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = _authService.currentUser?.uid ?? 'guest';
+      final key = '${_chatHistoryKey}_$userId';
+      
+      await prefs.remove(key);
+      setState(() {
+        _messages.clear();
+      });
+      _addWelcomeMessage();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat history deleted'),
+            backgroundColor: Color(0xFF6C63FF),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error deleting chat history: $e');
+    }
   }
   
   void _setupQuickQuestions() {
@@ -80,6 +153,7 @@ class _AIChatScreenState extends State<AIChatScreen>
           timestamp: DateTime.now(),
         ));
       });
+      _saveChatHistory();
     });
   }
 
@@ -106,6 +180,7 @@ class _AIChatScreenState extends State<AIChatScreen>
     });
 
     _scrollToBottom();
+    _saveChatHistory();
 
     // Placeholder message for streaming response
     final aiMsg = ChatMessage(
@@ -154,6 +229,7 @@ class _AIChatScreenState extends State<AIChatScreen>
                 );
              }
           });
+          _saveChatHistory();
         }
       },
       onError: (e) {
@@ -166,6 +242,7 @@ class _AIChatScreenState extends State<AIChatScreen>
                 timestamp: DateTime.now(),
              ));
           });
+          _saveChatHistory();
         }
       }
     );
@@ -181,6 +258,15 @@ class _AIChatScreenState extends State<AIChatScreen>
         );
       }
     });
+  }
+  
+  // Get dynamic title based on user role
+  String get _assistantTitle {
+    if (_userRole == 'alumni') {
+      return 'Alumni AI Assistant';
+    } else {
+      return 'Student AI Assistant';
+    }
   }
 
   @override
@@ -261,9 +347,9 @@ class _AIChatScreenState extends State<AIChatScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Gemini AI Assistant',
-                  style: TextStyle(
+                Text(
+                  _assistantTitle,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -290,9 +376,51 @@ class _AIChatScreenState extends State<AIChatScreen>
             ),
           ),
           
-          IconButton(
-            onPressed: () {},
+          // 3-dot menu with options
+          PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (value) {
+              if (value == 'delete') {
+                _showDeleteConfirmation();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'delete',
+                child: Row(
+                  children: const [
+                    Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    SizedBox(width: 12),
+                    Text('Delete History', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showDeleteConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Chat History'),
+        content: const Text('Are you sure you want to delete all chat history? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteHistory();
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -597,4 +725,24 @@ class ChatMessage {
     required this.timestamp,
     this.isStreaming = false,
   });
+  
+  // Convert to JSON for persistence
+  Map<String, dynamic> toJson() {
+    return {
+      'text': text,
+      'isUser': isUser,
+      'timestamp': timestamp.toIso8601String(),
+      'isStreaming': false, // Always save as not streaming
+    };
+  }
+  
+  // Create from JSON
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    return ChatMessage(
+      text: json['text'] ?? '',
+      isUser: json['isUser'] ?? false,
+      timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
+      isStreaming: false,
+    );
+  }
 }

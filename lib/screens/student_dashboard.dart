@@ -265,27 +265,27 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   ],
                 ),
               ),
-              _buildNotificationIcon(isDark),
+             // _buildNotificationIcon(isDark),
             ],
           ),
           const SizedBox(height: 24),
-          _buildSearchBox(isDark),
+          //_buildSearchBox(isDark),
         ],
       ),
     );
   }
 
   Widget _buildVerificationBanner(AppUser user) {
+    // Don't show banner for verified users
+    if (user.isVerified) {
+      return const SizedBox.shrink();
+    }
+
     Color bgColor, textColor;
     IconData icon;
     String message;
 
-    if (user.isVerified) {
-      bgColor = Colors.green.shade50;
-      textColor = Colors.green.shade700;
-      icon = Icons.verified_user;
-      message = 'Your profile is verified! Full access granted.';
-    } else if (user.isRejected == true) {
+    if (user.isRejected == true) {
       bgColor = Colors.red.shade50;
       textColor = Colors.red.shade700;
       icon = Icons.cancel;
@@ -621,7 +621,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
           crossAxisCount: 2,
           crossAxisSpacing: 16,
           mainAxisSpacing: 16,
-          childAspectRatio: 1.5,
+          childAspectRatio: 1.3, // Reduced from 1.5 to give more height
         ),
         itemCount: features.length,
         itemBuilder: (context, index) {
@@ -638,7 +638,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Opacity(
               opacity: f['locked'] == true ? 0.6 : 1.0,
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16), // Reduced from 20 to 16
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -646,20 +646,24 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min, // Added to prevent expansion
                   children: [
                     Stack(
                       alignment: Alignment.topRight,
                       children: [
-                        Icon(f['icon'] as IconData, color: f['color'] as Color, size: 36),
+                        Icon(f['icon'] as IconData, color: f['color'] as Color, size: 32), // Reduced from 36
                         if (f['locked'] == true)
-                          const Icon(Icons.lock, size: 16, color: Colors.grey),
+                          const Icon(Icons.lock, size: 14, color: Colors.grey), // Reduced from 16
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      f['title'] as String,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
+                    const SizedBox(height: 8), // Reduced from 12
+                    Flexible( // Added Flexible to prevent text overflow
+                      child: Text(
+                        f['title'] as String,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), // Reduced from 14
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -673,24 +677,30 @@ class _StudentDashboardState extends State<StudentDashboard> {
 
   Widget _buildFloatingActionButton(bool isDark) {
     return Container(
-      width: 64,
-      height: 64,
+      width: 56,
+      height: 56,
       decoration: BoxDecoration(
         gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF4E9FFF)]),
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF6C63FF).withOpacity(0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: IconButton(
-        icon: const Icon(Icons.chat_rounded, color: Colors.white, size: 28),
-        onPressed: isVerified
-            ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AIChatScreen()))
-            : _showVerificationRequired,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(28),
+          onTap: isVerified
+              ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AIChatScreen()))
+              : _showVerificationRequired,
+          child: const Center(
+            child: Icon(Icons.chat_rounded, color: Colors.white, size: 24),
+          ),
+        ),
       ),
     );
   }
@@ -699,53 +709,53 @@ class _StudentDashboardState extends State<StudentDashboard> {
   //  Reusable small widgets
   // ──────────────────────────────────────────────
 
-  Widget _buildSearchBox(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-      ),
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: 'Search mentors, events, resources...',
-          hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black45),
-          prefixIcon: const Icon(Icons.search_rounded),
-          border: InputBorder.none,
-        ),
-      ),
-    );
-  }
+  // Widget _buildSearchBox(bool isDark) {
+  //   return Container(
+  //     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+  //     decoration: BoxDecoration(
+  //       color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+  //       borderRadius: BorderRadius.circular(16),
+  //       border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+  //     ),
+  //     child: TextField(
+  //       decoration: InputDecoration(
+  //         hintText: 'Search mentors, events, resources...',
+  //         hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.black45),
+  //         prefixIcon: const Icon(Icons.search_rounded),
+  //         border: InputBorder.none,
+  //       ),
+  //     ),
+  //   );
+  // }
 
-  Widget _buildNotificationIcon(bool isDark) {
-    return Stack(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: IconButton(icon: const Icon(Icons.notifications_rounded), onPressed: () {}),
-        ),
-        Positioned(
-          right: 10,
-          top: 10,
-          child: Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFF6B9D),
-              shape: BoxShape.circle,
-              border: Border.all(color: isDark ? const Color(0xFF0F0F1E) : Colors.white, width: 2),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildNotificationIcon(bool isDark) {
+  //   return Stack(
+  //     children: [
+  //       Container(
+  //         width: 48,
+  //         height: 48,
+  //         decoration: BoxDecoration(
+  //           color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+  //           borderRadius: BorderRadius.circular(14),
+  //         ),
+  //         child: IconButton(icon: const Icon(Icons.notifications_rounded), onPressed: () {}),
+  //       ),
+  //       Positioned(
+  //         right: 10,
+  //         top: 10,
+  //         child: Container(
+  //           width: 10,
+  //           height: 10,
+  //           decoration: BoxDecoration(
+  //             color: const Color(0xFFFF6B9D),
+  //             shape: BoxShape.circle,
+  //             border: Border.all(color: isDark ? const Color(0xFF0F0F1E) : Colors.white, width: 2),
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildStatCard(
     bool isDark, {
@@ -779,7 +789,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Flexible(
+            child: Text(
+              title, 
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           if (action.isNotEmpty)
             TextButton(
               onPressed: onTap,
@@ -796,20 +812,31 @@ class _StudentDashboardState extends State<StudentDashboard> {
   Widget _buildBottomNavBar(bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
+        color: isDark ? const Color(0xFF1A1A2E).withOpacity(0.95) : Colors.white.withOpacity(0.95),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+        border: Border(
+          top: BorderSide(
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.05),
+          ),
+        ),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(0, Icons.home_rounded, 'Home'),
-              _buildNavItem(1, Icons.groups_rounded, 'Community'),
-              const SizedBox(width: 64),
-              _buildNavItem(2, Icons.connect_without_contact, 'Connect'),
-              _buildNavItem(3, Icons.person_rounded, 'Profile'),
+              _buildNavItem(0, Icons.home_rounded, 'Home', isDark),
+              _buildNavItem(1, Icons.groups_rounded, 'Community', isDark),
+              const SizedBox(width: 56), // Space for FAB
+              _buildNavItem(2, Icons.connect_without_contact, 'Connect', isDark),
+              _buildNavItem(3, Icons.person_rounded, 'Profile', isDark),
             ],
           ),
         ),
@@ -817,29 +844,40 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label) {
+  Widget _buildNavItem(int index, IconData icon, String label, bool isDark) {
     final isSelected = _selectedIndex == index;
 
     return GestureDetector(
       onTap: () => setState(() => _selectedIndex = index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
-            size: 28,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? const Color(0xFF6C63FF) : Colors.grey,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? const Color(0xFF6C63FF).withOpacity(0.15) 
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? const Color(0xFF6C63FF) : (isDark ? Colors.white54 : Colors.grey),
+              size: 24,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? const Color(0xFF6C63FF) : (isDark ? Colors.white54 : Colors.grey),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

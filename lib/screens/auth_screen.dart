@@ -18,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   
   bool _isLoading = false;
   bool _showEmailForm = false;
@@ -27,6 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
@@ -51,13 +53,15 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
+      final name = _nameController.text.trim();
       
       final userCredential = _isRegistering
           ? await _authService.registerWithEmail(email, password)
           : await _authService.signInWithEmail(email, password);
       
       if (userCredential != null && mounted) {
-        await _handlePostLogin(userCredential.user!);
+        // For new email registrations, pass the name entered by user
+        await _handlePostLogin(userCredential.user!, emailUserName: _isRegistering ? name : null);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -73,19 +77,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handlePostLogin(user) async {
+  Future<void> _handlePostLogin(user, {String? emailUserName}) async {
   // 1. Check if this is a new user (Sign Up flow)
   final isNew = await _authService.isNewUser(user.uid);
   
   if (isNew) {
     if (mounted) {
+      // For email registration, use the provided name; for Google, use displayName
+      final userName = emailUserName ?? user.displayName ?? 'User';
       // New users go to Role Selection, then to Profile Setup
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (context) => RoleSelectionScreen(
             userId: user.uid,
-            userName: user.displayName ?? 'User',
+            userName: userName,
             userEmail: user.email ?? '',
           ),
         ),
@@ -300,6 +306,33 @@ class _LoginScreenState extends State<LoginScreen> {
       key: _formKey,
       child: Column(
         children: [
+          // Name field - only shown during registration
+          if (_isRegistering) ...[
+            TextFormField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Full Name',
+                labelStyle: const TextStyle(color: Colors.black54),
+                prefixIcon: const Icon(Icons.person_outline, color: Colors.black54),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter your name';
+                }
+                if (value.trim().length < 2) {
+                  return 'Name must be at least 2 characters';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+          ],
           TextFormField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,

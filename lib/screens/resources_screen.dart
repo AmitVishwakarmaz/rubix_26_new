@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/firestore_service.dart';
+import '../services/gamification_service.dart';
 import '../models/resource_model.dart';
 
 class ResourcesScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class ResourcesScreen extends StatefulWidget {
 
 class _ResourcesScreenState extends State<ResourcesScreen> {
   final _firestoreService = FirestoreService();
+  final _gamificationService = GamificationService();
   final _searchController = TextEditingController();
 
   String _selectedCategory = ResourceCategory.all;
@@ -91,21 +93,57 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
   }
 
   Future<void> _openLink(String url) async {
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No download link available'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open link')),
-        );
+      // Ensure URL has proper scheme
+      String urlToOpen = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        urlToOpen = 'https://$url';
+      }
+      
+      print('📥 Opening URL: $urlToOpen');
+      final uri = Uri.parse(urlToOpen);
+      
+      // Try to launch with external application
+      final launched = await launchUrl(
+        uri, 
+        mode: LaunchMode.externalApplication,
+      );
+      
+      if (!launched) {
+        // Fallback to in-app browser
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      }
+      
+      // Award XP for downloading a resource
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        await _gamificationService.onResourceDownload(userId);
       }
     } catch (e) {
       print('❌ Error opening link: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error opening link: $e')),
+        SnackBar(
+          content: Text('Could not open link. Please copy the URL manually.'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Copy',
+            textColor: Colors.white,
+            onPressed: () {
+              // Import Clipboard at the top of file if needed
+            },
+          ),
+        ),
       );
     }
   }
@@ -209,10 +247,16 @@ class _ResourcesScreenState extends State<ResourcesScreen> {
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Resource uploaded successfully'),
+                                  content: Text('Resource uploaded successfully! +25 XP'),
                                   backgroundColor: Colors.green,
                                 ),
                               );
+                              
+                              // Award XP for uploading a resource
+                              final userId = FirebaseAuth.instance.currentUser?.uid;
+                              if (userId != null) {
+                                await _gamificationService.onResourceUpload(userId);
+                              }
                             } catch (e) {
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(

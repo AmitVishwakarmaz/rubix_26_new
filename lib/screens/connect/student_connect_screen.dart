@@ -465,7 +465,7 @@ class _StudentConnectScreenState extends State<StudentConnectScreen>
 
   Widget _buildSentRequestsTab(bool isDark) {
     return StreamBuilder<List<ConnectionRequest>>(
-      stream: _connectionService.streamStudentRequests(_currentUser!.userId),
+      stream: _connectionService.streamStudentPendingRequests(_currentUser!.userId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

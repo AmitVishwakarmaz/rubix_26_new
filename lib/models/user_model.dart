@@ -34,6 +34,8 @@ class AppUser {
   final int xp;
   final int totalSessions;
   final int mentorsConnected;
+  final List<String>? connections;
+  final int committeesJoined;
   
   // Saved Alumni (for students)
   final List<String>? savedAlumniIds;
@@ -50,6 +52,8 @@ class AppUser {
     this.xp = 0,
     this.totalSessions = 0,
     this.mentorsConnected = 0,
+    this.connections,
+    this.committeesJoined = 0,
     this.profileImageUrl,
     // Student fields
     this.university,
@@ -80,6 +84,8 @@ class AppUser {
       xp: map['xp'] ?? 0,
       totalSessions: map['totalSessions'] ?? 0,
       mentorsConnected: map['mentorsConnected'] ?? 0,
+      connections: (map['connections'] as List<dynamic>?)?.cast<String>(),
+      committeesJoined: map['committeesJoined'] ?? 0,
       profileImageUrl: map['profileImageUrl'],
       // Student fields
       university: map['university'],
@@ -122,6 +128,8 @@ class AppUser {
       'xp': xp,
       'totalSessions': totalSessions,
       'mentorsConnected': mentorsConnected,
+      if (connections != null) 'connections': connections,
+      'committeesJoined': committeesJoined,
       if (profileImageUrl != null) 'profileImageUrl': profileImageUrl,
       // Student fields
       if (university != null) 'university': university,
@@ -148,13 +156,27 @@ class AppUser {
   bool get isPending => verificationStatus == VerificationStatus.pending;
   bool get isRejected => verificationStatus == VerificationStatus.rejected;
   
-  // Gamification Ranks
+  // Gamification Ranks (Codeforces-style)
+  // Level = xp / 100 + 1
+  // L1-2: Newbie, L3-4: Pupil, L5-6: Specialist, L7-8: Expert, L9-10: Master, L11+: Grandmaster
+  int get level => (xp / 100).floor() + 1;
+  
   String get rank {
-    if (xp < 100) return 'Novice';
-    if (xp < 300) return 'Pupil';
-    if (xp < 600) return 'Specialist';
-    if (xp < 1000) return 'Expert';
+    if (level <= 2) return 'Newbie';
+    if (level <= 4) return 'Pupil';
+    if (level <= 6) return 'Specialist';
+    if (level <= 8) return 'Expert';
+    if (level <= 10) return 'Master';
     return 'Grandmaster';
+  }
+  
+  int get rankColor {
+    if (level <= 2) return 0xFF808080;      // Gray - Newbie
+    if (level <= 4) return 0xFF00C853;      // Green - Pupil
+    if (level <= 6) return 0xFF00BCD4;      // Cyan - Specialist
+    if (level <= 8) return 0xFF2196F3;      // Blue - Expert
+    if (level <= 10) return 0xFFFF9800;     // Orange - Master
+    return 0xFFE91E63;                       // Pink - Grandmaster
   }
 
   /// Create a copy with updated fields
@@ -167,6 +189,8 @@ class AppUser {
     int? xp,
     int? totalSessions,
     int? mentorsConnected,
+    List<String>? connections,
+    int? committeesJoined,
     String? profileImageUrl,
     String? university,
     String? degree,
@@ -192,6 +216,8 @@ class AppUser {
       xp: xp ?? this.xp,
       totalSessions: totalSessions ?? this.totalSessions,
       mentorsConnected: mentorsConnected ?? this.mentorsConnected,
+      connections: connections ?? this.connections,
+      committeesJoined: committeesJoined ?? this.committeesJoined,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       university: university ?? this.university,
       degree: degree ?? this.degree,

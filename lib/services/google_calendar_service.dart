@@ -115,6 +115,8 @@ This session was booked via the Mentorship App.
   /// Parse date string like "Jan 22, 2026" and time like "9:00 AM"
   static DateTime? _parseDateTime(String date, String time) {
     try {
+      print('📅 Parsing date: "$date" time: "$time"');
+      
       final months = {
         'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4,
         'May': 5, 'Jun': 6, 'Jul': 7, 'Aug': 8,
@@ -122,32 +124,54 @@ This session was booked via the Mentorship App.
       };
 
       // Parse date: "Jan 22, 2026"
-      final dateParts = date.replaceAll(',', '').split(' ');
-      if (dateParts.length < 3) return null;
+      final cleanDate = date.trim().replaceAll(',', '');
+      final dateParts = cleanDate.split(RegExp(r'\s+'));
+      print('📅 Date parts: $dateParts');
+      
+      if (dateParts.length < 3) {
+        print('❌ Invalid date format, expected 3 parts');
+        return null;
+      }
 
       final month = months[dateParts[0]];
       final day = int.tryParse(dateParts[1]);
       final year = int.tryParse(dateParts[2]);
 
-      if (month == null || day == null || year == null) return null;
+      print('📅 Parsed: month=$month, day=$day, year=$year');
 
-      // Parse time: "9:00 AM"
-      final timeParts = time.split(' ');
+      if (month == null || day == null || year == null) {
+        print('❌ Could not parse date components');
+        return null;
+      }
+
+      // Parse time: "9:00 AM" or "2:30 PM"
+      final cleanTime = time.trim();
+      final timeParts = cleanTime.split(RegExp(r'\s+'));
+      print('⏰ Time parts: $timeParts');
+      
       final timeValues = timeParts[0].split(':');
-      var hour = int.tryParse(timeValues[0]) ?? 9;
+      var hour = int.tryParse(timeValues[0]) ?? 0;
       final minute = int.tryParse(timeValues.length > 1 ? timeValues[1] : '0') ?? 0;
 
+      print('⏰ Initial: hour=$hour, minute=$minute');
+
+      // Handle AM/PM
       if (timeParts.length > 1) {
-        if (timeParts[1].toUpperCase() == 'PM' && hour != 12) {
+        final ampm = timeParts[1].toUpperCase();
+        if (ampm == 'PM' && hour != 12) {
           hour += 12;
-        } else if (timeParts[1].toUpperCase() == 'AM' && hour == 12) {
+        } else if (ampm == 'AM' && hour == 12) {
           hour = 0;
         }
       }
 
-      return DateTime(year, month, day, hour, minute);
+      print('⏰ Final: hour=$hour, minute=$minute');
+
+      final result = DateTime(year, month, day, hour, minute);
+      print('✅ Parsed DateTime: $result');
+      return result;
     } catch (e) {
-      print('Date parsing error: $e');
+      print('❌ Date parsing error: $e');
       return null;
     }
   }

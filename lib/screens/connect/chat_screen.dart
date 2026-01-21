@@ -799,11 +799,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _joinMeeting(ChatMessage message) {
     final roomName = message.meetingRoomName;
-    final token = message.meetingToken;
     final title = message.meetingTitle ?? 'Video Meeting';
     final scheduledTime = message.meetingScheduledTime ?? DateTime.now();
 
-    if (roomName == null || token == null) {
+    if (roomName == null || roomName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Invalid meeting data'),
@@ -812,6 +811,15 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       return;
     }
+
+    // Generate a unique token for THIS user (not using shared token)
+    // This way both users join the same room but with their own identity
+    final token = MeetingService.generateToken(
+      roomName: roomName,
+      identity: widget.currentUserName.isNotEmpty 
+          ? widget.currentUserName 
+          : 'user_${widget.currentUserId.substring(0, 8)}',
+    );
 
     Navigator.push(
       context,

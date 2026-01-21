@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../services/community_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/gamification_service.dart';
 import '../../models/community_model.dart';
 import '../../models/user_model.dart';
 import 'create_community_screen.dart';
@@ -19,6 +20,7 @@ class _CommunityScreenState extends State<CommunityScreen>
     with SingleTickerProviderStateMixin {
   final _communityService = CommunityService();
   final _firestoreService = FirestoreService();
+  final _gamificationService = GamificationService();
 
   late TabController _tabController;
   AppUser? _currentUser;
@@ -419,10 +421,13 @@ class _CommunityScreenState extends State<CommunityScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Joined ${community.name}!'),
+            content: Text('Joined ${community.name}! +10 XP'),
             backgroundColor: const Color(0xFF00D4AA),
           ),
         );
+        
+        // Award XP for joining community
+        await _gamificationService.onCommunityJoin(user.userId);
       }
     } catch (e) {
       if (mounted) {

@@ -158,6 +158,91 @@ class FirestoreService {
             .toList());
   }
 
+  /// Stream the count of communities a user has joined
+  /// NOTE: joinedCommunities is stored in 'user_communities' collection, not 'users'
+  Stream<int> streamUserCommunityCount(String userId) {
+    return _firestore.collection('user_communities').doc(userId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) return 0;
+      final data = doc.data()!;
+      final communities = data['joinedCommunities'] as List<dynamic>?;
+      return communities?.length ?? 0;
+    });
+  }
+
+  /// Stream alumni that match the user's career interests
+  Stream<List<AppUser>> streamMatchedAlumni(List<String> interests) {
+    if (interests.isEmpty) {
+      // Return all verified alumni if no interests specified
+      return streamAllUsers();
+    }
+    
+    return _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        .where('verificationStatus', isEqualTo: 'verified')
+        .snapshots()
+        .map((snapshot) {
+          final allAlumni = snapshot.docs
+              .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+              .toList();
+          
+          // Filter by matching interests
+          final matched = allAlumni.where((alumni) {
+            final mentorshipInterests = alumni.mentorshipInterests ?? [];
+            final alumniIndustry = alumni.industry?.toLowerCase() ?? '';
+            
+            // Check if any of the user's interests match the alumni's mentorship interests or industry
+            for (final interest in interests) {
+              final lowerInterest = interest.toLowerCase();
+              if (mentorshipInterests.any((m) => m.toLowerCase().contains(lowerInterest))) {
+                return true;
+              }
+              if (alumniIndustry.contains(lowerInterest)) {
+                return true;
+              }
+            }
+            return false;
+          }).toList();
+          
+          // If no matches, return some alumni anyway
+          return matched.isNotEmpty ? matched : allAlumni.take(5).toList();
+        });
+  }
+
+  /// Get alumni that match the user's career interests (non-stream version)
+  Future<List<AppUser>> getMatchedAlumni(List<String> interests) async {
+    final snapshot = await _usersCollection
+        .where('role', isEqualTo: 'alumni')
+        .where('verificationStatus', isEqualTo: 'verified')
+        .get();
+    
+    final allAlumni = snapshot.docs
+        .map((doc) => AppUser.fromMap(doc.data(), doc.id))
+        .toList();
+    
+    if (interests.isEmpty) {
+      return allAlumni.take(10).toList();
+    }
+    
+    // Filter by matching interests
+    final matched = allAlumni.where((alumni) {
+      final mentorshipInterests = alumni.mentorshipInterests ?? [];
+      final alumniIndustry = alumni.industry?.toLowerCase() ?? '';
+      
+      for (final interest in interests) {
+        final lowerInterest = interest.toLowerCase();
+        if (mentorshipInterests.any((m) => m.toLowerCase().contains(lowerInterest))) {
+          return true;
+        }
+        if (alumniIndustry.contains(lowerInterest)) {
+          return true;
+        }
+      }
+      return false;
+    }).toList();
+    
+    return matched.isNotEmpty ? matched : allAlumni.take(5).toList();
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // EVENT-RELATED METHODS
   // ═══════════════════════════════════════════════════════════════════════════

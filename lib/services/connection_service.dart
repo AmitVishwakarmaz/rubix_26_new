@@ -79,7 +79,7 @@ class ConnectionService {
     });
   }
 
-  /// Stream requests sent by student
+  /// Stream requests sent by student (all statuses)
   Stream<List<ConnectionRequest>> streamStudentRequests(String studentId) {
     return _requestsRef
         .where('studentId', isEqualTo: studentId)
@@ -88,6 +88,21 @@ class ConnectionService {
         .map((snapshot) => snapshot.docs
             .map((doc) => ConnectionRequest.fromMap(doc.data(), doc.id))
             .toList());
+  }
+
+  /// Stream only PENDING requests sent by student (for Requests tab)
+  Stream<List<ConnectionRequest>> streamStudentPendingRequests(String studentId) {
+    return _requestsRef
+        .where('studentId', isEqualTo: studentId)
+        .snapshots()
+        .map((snapshot) {
+          final requests = snapshot.docs
+              .map((doc) => ConnectionRequest.fromMap(doc.data(), doc.id))
+              .where((r) => r.status == 'pending')
+              .toList();
+          requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return requests;
+        });
   }
 
   /// Stream pending requests for alumni (simplified query - client-side filter for ordering)

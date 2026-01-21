@@ -4,7 +4,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/connection_service.dart';
 import '../models/user_model.dart';
+import '../models/connection_model.dart';
 import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -17,6 +19,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final FirestoreService _firestoreService = FirestoreService();
+  final ConnectionService _connectionService = ConnectionService();
   final ImagePicker _picker = ImagePicker();
   
   bool _isUploading = false;
@@ -383,26 +386,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            IconButton(
-              onPressed: () {
-                // Navigate to settings if implemented
-              },
-              icon: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.settings_rounded),
-              ),
-            ),
+            // IconButton(
+            //   onPressed: () {
+            //     // Navigate to settings if implemented
+            //   },
+            //   icon: Container(
+            //     padding: const EdgeInsets.all(8),
+            //     decoration: BoxDecoration(
+            //       color: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+            //       borderRadius: BorderRadius.circular(12),
+            //       boxShadow: [
+            //         BoxShadow(
+            //           color: Colors.black.withOpacity(0.05),
+            //           blurRadius: 10,
+            //           offset: const Offset(0, 5),
+            //         ),
+            //       ],
+            //     ),
+            //     child: const Icon(Icons.settings_rounded),
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -525,6 +528,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final currentLevel = (user.xp / 100).floor() + 1;
     final progress = (user.xp % 100) / 100.0;
     final rank = user.rank;
+    final rankColor = Color(user.rankColor);
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -568,13 +572,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00D4AA).withOpacity(0.2),
+                    color: rankColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     rank, 
-                    style: const TextStyle(
-                      color: Color(0xFF00D4AA),
+                    style: TextStyle(
+                      color: rankColor,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -588,7 +592,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: LinearProgressIndicator(
                 value: progress,
                 backgroundColor: isDark ? Colors.white12 : Colors.grey.shade200,
-                color: const Color(0xFF00D4AA),
+                color: rankColor,
                 minHeight: 8,
               ),
             ),
@@ -611,23 +615,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
+          // Connections count - live from streams
           Expanded(
-            child: _buildStatCard(
-              isDark,
-              icon: Icons.school_rounded,
-              label: user.isAlumni ? 'Mentees' : 'Mentors',
-              value: '12', // TODO: Fetch real count of connected mentors/mentees
-              color: const Color(0xFF6C63FF),
+            child: StreamBuilder<List<ConnectionRequest>>(
+              stream: user.isAlumni 
+                  ? _connectionService.streamAlumniConnections(user.userId)
+                  : _connectionService.streamStudentConnections(user.userId),
+              builder: (context, snapshot) {
+                final count = snapshot.data?.length ?? 0;
+                return _buildStatCard(
+                  isDark,
+                  icon: Icons.people_rounded,
+                  label: 'Connections',
+                  value: '$count',
+                  color: const Color(0xFF6C63FF),
+                );
+              },
             ),
           ),
           const SizedBox(width: 16),
+          // Communities joined - from Firestore communities collection
           Expanded(
-            child: _buildStatCard(
-              isDark,
-              icon: Icons.videocam_rounded,
-              label: 'Sessions',
-              value: '${user.totalSessions}',
-              color: Colors.amber,
+            child: StreamBuilder<int>(
+              stream: _firestoreService.streamUserCommunityCount(user.userId),
+              builder: (context, snapshot) {
+                final count = snapshot.data ?? 0;
+                return _buildStatCard(
+                  isDark,
+                  icon: Icons.groups_rounded,
+                  label: 'Communities',
+                  value: '$count',
+                  color: Colors.amber,
+                );
+              },
             ),
           ),
         ],
